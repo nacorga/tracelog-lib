@@ -46,10 +46,16 @@ export const WEB_VITALS_POOR_THRESHOLDS: Record<WebVitalType, number> = {
 
 /**
  * Default Web Vitals mode
- * 'needs-improvement' provides balanced approach - captures metrics that need attention
- * while filtering out good performance (reduces noise and costs)
+ *
+ * 'all' captures every measured metric, including good ones. Filtering to
+ * 'needs-improvement'/'poor' censors the sample at source: the server can no
+ * longer tell a truncated sample from a complete one, and every derived
+ * statistic (p75, good/needs-improvement/poor split) becomes conditional on
+ * "given the metric was already bad". Consolidation (one event per
+ * navigation, see `PerformanceHandler`) is what keeps capturing everything
+ * affordable.
  */
-export const DEFAULT_WEB_VITALS_MODE: WebVitalsMode = 'needs-improvement';
+export const DEFAULT_WEB_VITALS_MODE: WebVitalsMode = 'all';
 
 /**
  * Get Web Vitals thresholds for the specified mode

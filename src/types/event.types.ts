@@ -164,6 +164,30 @@ export interface WebVitalsData {
 }
 
 /**
+ * Explicit discriminator for the consolidated web-vitals wire shape. The server
+ * reads this field to tell an honest (uncensored) sample from the legacy
+ * per-metric one — never inferred from field presence.
+ */
+export type WebVitalsSchema = 'consolidated';
+
+/**
+ * One consolidated Web Vitals sample: every metric measured for a single
+ * navigation, uncensored, emitted as a single `WEB_VITALS` event. Replaces
+ * the legacy one-event-per-metric shape, which pre-filtered client-side
+ * (a censored sample) and could emit up to five events per navigation.
+ *
+ * Metrics arrive at different times within a navigation (FCP/TTFB early,
+ * LCP/INP/CLS at page hide), so `metrics` may carry a partial set — 1 to 5
+ * entries, one per `WebVitalType`.
+ */
+export interface WebVitalsConsolidatedData {
+  /** Discriminator the server reads to distinguish this from the legacy shape */
+  schema: WebVitalsSchema;
+  /** Every metric measured for this navigation so far (non-empty, max 5) */
+  metrics: WebVitalsData[];
+}
+
+/**
  * JavaScript error details
  */
 export interface ErrorData {
@@ -251,7 +275,7 @@ export interface EventData {
   /** Custom event details (when type is CUSTOM) */
   custom_event?: CustomEventData;
   /** Performance metrics (when type is WEB_VITALS) */
-  web_vitals?: WebVitalsData;
+  web_vitals?: WebVitalsConsolidatedData;
   /** Page view details (when type is PAGE_VIEW) */
   page_view?: PageViewData;
   /** Error details (when type is ERROR) */

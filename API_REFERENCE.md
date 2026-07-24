@@ -454,8 +454,8 @@ await tracelog.init({ errorSampling: 0.1 }); // Track 10% of errors
 #### `webVitalsMode`
 
 - **Type:** `'all' | 'needs-improvement' | 'poor'`
-- **Default:** `'needs-improvement'`
-- **Description:** controls which Web Vitals metrics are tracked
+- **Default:** `'all'`
+- **Description:** controls which Web Vitals metrics are tracked. `'all'` (the default) tracks every measured value, including good ones — an uncensored sample. `'needs-improvement'` and `'poor'` censor good values client-side; only opt into them if you understand you're giving up the ability to compute a true good/needs-improvement/poor split server-side.
 
 ```typescript
 await tracelog.init({ webVitalsMode: 'all' });
@@ -753,15 +753,19 @@ tracelog.event('product_viewed', { productId: 'abc-123', price: 299.99 });
 
 ### `WEB_VITALS`
 
-Core Web Vitals performance metrics.
+Core Web Vitals performance metrics — one consolidated event per navigation,
+carrying every metric measured so far (not one event per metric).
 
 **Additional properties:**
 
 ```typescript
 {
   web_vitals: {
-    type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
-    value: number;
+    schema: 'consolidated';
+    metrics: Array<{
+      type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
+      value: number;
+    }>; // 1–5 entries — partial sets are normal (metrics finalize at different times)
   };
 }
 ```
@@ -774,7 +778,11 @@ Core Web Vitals performance metrics.
 | `INP`  | Interaction to Next Paint | milliseconds    |
 | `TTFB` | Time to First Byte        | milliseconds    |
 
-Filtering is controlled by `webVitalsMode` and `webVitalsThresholds`.
+Metrics are buffered per navigation and flushed as one event on `pagehide` /
+`visibilitychange` (document hidden) — the same lifecycle points the queue
+itself flushes on — or when a new navigation starts (SPA route change).
+`webVitalsMode`/`webVitalsThresholds` still control which measured values are
+kept; the default (`'all'`) keeps everything, including good values.
 
 ---
 
@@ -900,6 +908,7 @@ import {
   ClickData,
   CustomEventData,
   WebVitalsData,
+  WebVitalsConsolidatedData,
   ErrorData,
   PageViewData,
   UTM,

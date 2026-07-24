@@ -401,7 +401,11 @@ export class EventManager extends StateManager {
       return;
     }
 
-    if (!isCriticalEvent && !this.shouldSample()) {
+    // WEB_VITALS is exempt from samplingRate (but not from rate limiting or
+    // session caps, unlike SESSION_START): a merchant's sampling rate must
+    // never silently thin the CWV sample out from under the honesty
+    // guarantee consolidation was built to provide.
+    if (!isCriticalEvent && eventType !== EventType.WEB_VITALS && !this.shouldSample()) {
       return;
     }
 
@@ -1223,7 +1227,12 @@ export class EventManager extends StateManager {
     }
 
     if (event.web_vitals) {
-      fingerprint += `_vitals_${event.web_vitals.type}`;
+      // Content-based, not type-based: the consolidated payload carries every
+      // measured metric's value, so two genuinely different measurements for
+      // the same navigation-boundary edge case (e.g. a late-arriving INP after
+      // an earlier flush) must not collapse into one fingerprint just because
+      // both are `web_vitals` events for the same page_url.
+      fingerprint += `_vitals_${this.stableStringify(event.web_vitals)}`;
     }
 
     if (event.error_data) {

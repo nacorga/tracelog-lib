@@ -343,20 +343,26 @@ await tracelog.init({
 });
 ```
 
-### ✅ DO: Tune Web Vitals filtering
+### ✅ DO: Leave Web Vitals on the default `'all'` mode
 
-Most sites only need the `'needs-improvement'` or `'poor'` modes — `'all'` is for trend analysis and P75 calculations.
+Metrics are consolidated into one event per navigation (not one per metric), so capturing
+every value — including good ones — costs a fraction of what naive per-metric capture would.
+Filtering to `'needs-improvement'` or `'poor'` censors the sample at the source: the server can
+no longer distinguish a truncated sample from a complete one, and derived statistics (p75,
+the good/needs-improvement/poor split) become conditional on "given the metric was already
+bad". Only opt into a narrower mode if you've deliberately decided to trade that away for less
+ingest and you don't need a true good/poor split.
 
 ```typescript
-// Default — already a good balance
-await tracelog.init({ webVitalsMode: 'needs-improvement' });
+// Default — uncensored, full statistical fidelity
+await tracelog.init({ webVitalsMode: 'all' });
 
-// Strict: only report metrics in the "poor" range
-await tracelog.init({ webVitalsMode: 'poor' });
+// Opt-in narrowing: only report metrics that need improvement or are poor
+await tracelog.init({ webVitalsMode: 'needs-improvement' });
 
 // Custom thresholds for fine-grained control
 await tracelog.init({
-  webVitalsMode: 'needs-improvement',
+  webVitalsMode: 'all',
   webVitalsThresholds: { LCP: 3000, INP: 150 },
 });
 ```
@@ -596,8 +602,11 @@ Expected impact on your application:
 
 **Optimization tips:**
 
-- Use `samplingRate` to reduce backend load
-- Use `webVitalsMode: 'needs-improvement'` or `'poor'` to filter benign measurements
+- Use `samplingRate` to reduce backend load (note: `WEB_VITALS` is exempt from `samplingRate` by
+  design — a merchant's sampling rate must never silently thin the Core Web Vitals sample)
+- Web Vitals are already consolidated into one event per navigation — only narrow
+  `webVitalsMode` below the default `'all'` if you've deliberately decided to trade sample
+  completeness for less ingest
 - Always clean up listeners in SPAs to prevent memory leaks
 - Avoid heavy synchronous work in `'event'` callbacks
 

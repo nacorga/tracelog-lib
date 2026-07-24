@@ -89,8 +89,8 @@ export function createMockEvent(type: EventType, overrides?: Partial<EventData>)
   } else if (type === EventType.WEB_VITALS) {
     typeSpecificData = {
       web_vitals: {
-        type: 'LCP',
-        value: 2500,
+        schema: 'consolidated',
+        metrics: [{ type: 'LCP', value: 2500 }],
       },
     };
   } else {

@@ -456,7 +456,7 @@ const WEB_VITALS_POOR_THRESHOLDS = {
   INP: 500,
   TTFB: 1800
 };
-const DEFAULT_WEB_VITALS_MODE = "needs-improvement";
+const DEFAULT_WEB_VITALS_MODE = "all";
 const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   switch (mode) {
     case "all":
@@ -470,7 +470,7 @@ const getWebVitalsThresholds = (mode = DEFAULT_WEB_VITALS_MODE) => {
   }
 };
 const MAX_NAVIGATION_HISTORY = 50;
-const version = "3.2.0";
+const version = "3.3.2";
 const LIB_VERSION = version;
 const isBrowserEnvironment = () => {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
@@ -2348,7 +2348,7 @@ class EventManager extends StateManager {
     if (!payload) {
       return;
     }
-    if (!isCriticalEvent && !this.shouldSample()) {
+    if (!isCriticalEvent && eventType !== EventType.WEB_VITALS && !this.shouldSample()) {
       return;
     }
     if (isSessionStart) {
@@ -3012,7 +3012,7 @@ class EventManager extends StateManager {
       }
     }
     if (event2.web_vitals) {
-      fingerprint += `_vitals_${event2.web_vitals.type}`;
+      fingerprint += `_vitals_${this.stableStringify(event2.web_vitals)}`;
     }
     if (event2.error_data) {
       fingerprint += `_error_${event2.error_data.type}_${event2.error_data.message}`;
@@ -4873,7 +4873,7 @@ class StorageManager {
 }
 class PerformanceHandler extends StateManager {
   eventManager;
-  reportedByNav = /* @__PURE__ */ new Map();
+  seenNavIds = /* @__PURE__ */ new Set();
   navigationHistory = [];
   // FIFO queue for tracking navigation order
   observers = [];
@@ -4882,6 +4882,20 @@ class PerformanceHandler extends StateManager {
   // Suffix counter for repeat navigations to the same path (SPA A→B→A)
   currentNavBase = null;
   currentNavId = null;
+  // Metrics measured for the navigation currently being buffered, keyed by
+  // type (last value wins — CLS/INP fallback observers can re-report a
+  // running total for the same type before flush). Flushed as ONE
+  // consolidated event on pagehide/hidden or when a new navigation starts.
+  currentBuffer = /* @__PURE__ */ new Map();
+  currentBufferNavId = null;
+  pageHideHandler = () => {
+    this.flushConsolidatedVitals();
+  };
+  visibilityHandler = () => {
+    if (typeof document !== "undefined" && document.hidden) {
+      this.flushConsolidatedVitals();
+    }
+  };
   constructor(eventManager) {
     super();
     this.eventManager = eventManager;
@@ -4890,8 +4904,13 @@ class PerformanceHandler extends StateManager {
   /**
    * Starts tracking Web Vitals and performance metrics.
    *
-   * Asynchronously loads the web-vitals library and initializes performance tracking.
-   * Falls back to native Performance Observer API if web-vitals fails to load.
+   * Registers the consolidation lifecycle listeners (`pagehide`,
+   * `visibilitychange`) synchronously, BEFORE asynchronously loading the
+   * web-vitals library — this must happen ahead of `App`'s own page-lifecycle
+   * listeners (registered right after `initializeHandlers()` returns) so the
+   * consolidated vitals event lands in the queue before `App` drains it via
+   * `sendBeacon`. Falls back to native Performance Observer API if web-vitals
+   * fails to load.
    *
    * **Configuration**:
    * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
@@ -4907,18 +4926,26 @@ class PerformanceHandler extends StateManager {
     if (config?.webVitalsThresholds) {
       this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
     }
+    window.addEventListener("pagehide", this.pageHideHandler);
+    document.addEventListener("visibilitychange", this.visibilityHandler);
     await this.initWebVitals();
   }
   /**
    * Stops tracking Web Vitals and cleans up resources.
    *
-   * Disconnects all Performance Observers and clears internal state:
+   * Flushes any buffered (not-yet-shipped) vitals for the current navigation
+   * first — called from `App.destroy()` before the final
+   * `flushImmediatelySync()`, so a partial buffer is never silently dropped.
+   * Then disconnects all Performance Observers and clears internal state:
+   * - Removes the consolidation lifecycle listeners
    * - Disconnects all active observers (web-vitals and long task)
-   * - Clears navigation-based deduplication map
-   * - Clears navigation history array
+   * - Clears navigation-boundary tracking and history
    * - Prevents memory leaks in long-running applications
    */
   stopTracking() {
+    this.flushConsolidatedVitals();
+    window.removeEventListener("pagehide", this.pageHideHandler);
+    document.removeEventListener("visibilitychange", this.visibilityHandler);
     this.observers.forEach((obs, index) => {
       try {
         obs.disconnect();
@@ -4927,11 +4954,13 @@ class PerformanceHandler extends StateManager {
       }
     });
     this.observers.length = 0;
-    this.reportedByNav.clear();
+    this.seenNavIds.clear();
     this.navigationHistory.length = 0;
     this.navigationCounter = 0;
     this.currentNavBase = null;
     this.currentNavId = null;
+    this.currentBuffer.clear();
+    this.currentBufferNavId = null;
   }
   observeWebVitalsFallback() {
     this.reportTTFB();
@@ -5029,42 +5058,55 @@ class PerformanceHandler extends StateManager {
       log("debug", "Failed to report TTFB", { error });
     }
   }
+  /**
+   * Buffers a measured metric for the current navigation, ready for
+   * consolidation into ONE event. Runs the threshold filter FIRST — a
+   * filtered-out sample must never touch navigation-boundary bookkeeping —
+   * then, on a genuine navigation-boundary change (a new navId the buffer
+   * isn't already tracking), flushes whatever was buffered for the previous
+   * navigation before starting a fresh one: SPA route changes never fire
+   * `pagehide`, so that's the only chance to ship it.
+   */
   sendVital(sample) {
     if (!this.shouldSendVital(sample.type, sample.value)) {
       return;
     }
     const navId = this.getNavigationId();
     if (navId) {
-      const reportedForNav = this.reportedByNav.get(navId);
-      const isDuplicate = reportedForNav?.has(sample.type);
-      if (isDuplicate) {
-        return;
-      }
-      if (!reportedForNav) {
-        this.reportedByNav.set(navId, /* @__PURE__ */ new Set([sample.type]));
+      if (!this.seenNavIds.has(navId)) {
+        this.seenNavIds.add(navId);
         this.navigationHistory.push(navId);
         if (this.navigationHistory.length > MAX_NAVIGATION_HISTORY) {
           const oldestNav = this.navigationHistory.shift();
           if (oldestNav) {
-            this.reportedByNav.delete(oldestNav);
+            this.seenNavIds.delete(oldestNav);
           }
         }
-      } else {
-        reportedForNav.add(sample.type);
+      }
+      if (navId !== this.currentBufferNavId) {
+        this.flushConsolidatedVitals();
+        this.currentBufferNavId = navId;
       }
     }
-    this.trackWebVital(sample.type, sample.value);
+    this.currentBuffer.set(sample.type, sample.value);
   }
-  trackWebVital(type, value) {
-    if (!Number.isFinite(value)) {
-      log("debug", "Invalid web vital value", { data: { type, value } });
+  /**
+   * Consolidates whatever is currently buffered into ONE `WEB_VITALS` event
+   * and clears the buffer. No-op when nothing is buffered — safe to call
+   * from both lifecycle listeners on every `pagehide`/hidden transition, and
+   * from `sendVital` on every navigation-boundary change.
+   */
+  flushConsolidatedVitals() {
+    if (this.currentBuffer.size === 0) {
       return;
     }
+    const metrics = Array.from(this.currentBuffer, ([type, value]) => ({ type, value }));
+    this.currentBuffer.clear();
     this.eventManager.track({
       type: EventType.WEB_VITALS,
       web_vitals: {
-        type,
-        value
+        schema: "consolidated",
+        metrics
       }
     });
   }
@@ -5072,9 +5114,9 @@ class PerformanceHandler extends StateManager {
    * Generates a deterministic navigation identifier for deduplication.
    *
    * **Purpose**: Every call within the same navigation must return the SAME id,
-   * so `reportedByNav` can collapse duplicate Web Vitals (one emission per
-   * metric type per navigation — critical for the fallback observers, which
-   * fire per entry batch).
+   * so the vitals buffer can collapse repeat reports of the same metric type
+   * into one buffered value per navigation — critical for the fallback
+   * observers, which fire per entry batch.
    *
    * **ID Format**: `{startTime}_{pathname}` or `{startTime}_{pathname}_{counter}`
    *
@@ -5102,7 +5144,7 @@ class PerformanceHandler extends StateManager {
         return this.currentNavId;
       }
       this.currentNavBase = baseId;
-      this.currentNavId = this.reportedByNav.has(baseId) ? `${baseId}_${++this.navigationCounter}` : baseId;
+      this.currentNavId = this.seenNavIds.has(baseId) ? `${baseId}_${++this.navigationCounter}` : baseId;
       return this.currentNavId;
     } catch (error) {
       log("debug", "Failed to get navigation ID", { error });
@@ -5148,13 +5190,21 @@ class PerformanceHandler extends StateManager {
       return false;
     }
   }
+  /**
+   * `<` not `<=`: a value exactly AT the threshold must still pass. This
+   * matters most in 'all' mode, where every threshold is mapped to `0`
+   * (`getWebVitalsThresholds`) — with `<=`, a CLS of exactly `0` or a TTFB of
+   * exactly `0` would be silently dropped even though 'all' means "track
+   * everything". TTFB legitimately reads `0` in Mobile Safari when the
+   * response is served from cache (see `reportTTFB`'s comment).
+   */
   shouldSendVital(type, value) {
     if (typeof value !== "number" || !Number.isFinite(value)) {
       log("debug", "Invalid web vital value", { data: { type, value } });
       return false;
     }
     const threshold = this.vitalThresholds[type];
-    if (typeof threshold === "number" && value <= threshold) {
+    if (typeof threshold === "number" && value < threshold) {
       return false;
     }
     return true;
@@ -5289,7 +5339,7 @@ class ErrorHandler extends StateManager {
     if (!this.shouldSample()) {
       return;
     }
-    const sanitizedMessage = this.sanitize(event2.message || "Unknown error");
+    const sanitizedMessage = this.sanitizeMessage(event2.message, "Unknown error");
     if (this.shouldSuppressError(ErrorType.JS_ERROR, sanitizedMessage)) {
       return;
     }
@@ -5325,7 +5375,7 @@ class ErrorHandler extends StateManager {
       return;
     }
     const message = this.extractRejectionMessage(event2.reason);
-    const sanitizedMessage = this.sanitize(message);
+    const sanitizedMessage = this.sanitizeMessage(message, "Unknown rejection");
     if (this.shouldSuppressError(ErrorType.PROMISE_REJECTION, sanitizedMessage)) {
       return;
     }
@@ -5362,6 +5412,17 @@ class ErrorHandler extends StateManager {
   sanitize(text) {
     const truncated = text.length > MAX_ERROR_MESSAGE_LENGTH ? text.slice(0, MAX_ERROR_MESSAGE_LENGTH) + "..." : text;
     return sanitizePii(truncated);
+  }
+  /**
+   * Sanitizes an error message and guarantees a non-empty result.
+   *
+   * An empty `error_data.message` (from a `Promise.reject('')`, `new Error('')`,
+   * or `{ message: '' }` reason — all of which stringify to '') is rejected by
+   * the ingestion DTO, which 400s the whole batch and drops the co-traveling
+   * events. Every error path must fall back to a non-empty placeholder.
+   */
+  sanitizeMessage(raw, fallback) {
+    return this.sanitize(raw) || fallback;
   }
   shouldSuppressError(type, message) {
     const now = Date.now();

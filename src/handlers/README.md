@@ -199,20 +199,26 @@ await tracelog.init({
 
 ## PerformanceHandler
 
-Captures Web Vitals using the `web-vitals` library. Configurable filtering modes allow tracking all metrics, metrics needing improvement, or only poor metrics.
+Captures Web Vitals using the `web-vitals` library, buffers them per navigation, and emits ONE
+consolidated event carrying every metric measured so far — never one event per metric.
+Configurable filtering modes still control which measured *values* are kept.
 
-**Events generated:** `web_vitals`
+**Events generated:** `web_vitals` (consolidated shape: `{ schema: 'consolidated', metrics: [...] }`)
 
 **Triggers:**
 
-- `web-vitals` library: `onLCP`, `onCLS`, `onFCP`, `onTTFB`, `onINP`
+- `web-vitals` library: `onLCP`, `onCLS`, `onFCP`, `onTTFB`, `onINP` (buffer measurements)
+- `pagehide` / `visibilitychange` (document hidden) — flush the buffer as one event; the same
+  lifecycle points `App` already uses to flush the event queue
+- A navigation-boundary change (SPA route change) — flushes the previous navigation's buffer,
+  since SPA route changes never fire `pagehide`
 
 **Configuration:**
 
 ```javascript
 await tracelog.init({
-  webVitalsMode: 'needs-improvement', // 'all' | 'needs-improvement' | 'poor'
-  webVitalsThresholds: {              // Optional per-metric overrides
+  webVitalsMode: 'all', // 'all' (default) | 'needs-improvement' | 'poor'
+  webVitalsThresholds: { // Optional per-metric overrides
     LCP: 3000,
     FCP: 2000,
   },
@@ -221,20 +227,30 @@ await tracelog.init({
 
 **Key features:**
 
-- **Configurable filtering modes** (via `webVitalsMode`):
-  - `'all'` — track all metrics (full trend analysis, P75 percentile calculations)
-  - `'needs-improvement'` (default) — track metrics that exceed the "good" threshold (balanced; reduces noise)
-  - `'poor'` — track only poor metrics (minimal data, focus on critical issues)
-- **Threshold reference** (Core Web Vitals standards from web.dev):
-  - `'needs-improvement'` defaults: LCP > 2500 ms, FCP > 1800 ms, CLS > 0.1, INP > 200 ms, TTFB > 800 ms
-  - `'poor'` defaults: LCP > 4000 ms, FCP > 3000 ms, CLS > 0.25, INP > 500 ms, TTFB > 1800 ms
-  - `'all'`: no filtering (threshold = 0)
+- **Consolidation** — metrics for the current navigation are buffered, not sent individually;
+  flushed as ONE event on `pagehide`/hidden or a navigation-boundary change. This is what makes
+  capturing every value, including good ones, affordable: up to 5 per-metric events collapse
+  into 1.
+- **Configurable filtering modes** (via `webVitalsMode`), applied per measured value BEFORE
+  buffering:
+  - `'all'` (default) — buffer every measured value, including good ones (uncensored sample)
+  - `'needs-improvement'` — buffer only metrics that exceed the "good" threshold (censors good values)
+  - `'poor'` — buffer only poor metrics (most heavily censored)
+- **Threshold reference** (Core Web Vitals standards from web.dev; the comparison is exclusive —
+  a value exactly AT the threshold still passes):
+  - `'needs-improvement'` defaults: LCP < 2500 ms dropped, FCP < 1800 ms dropped, CLS < 0.1 dropped, INP < 200 ms dropped, TTFB < 800 ms dropped
+  - `'poor'` defaults: LCP < 4000 ms dropped, FCP < 3000 ms dropped, CLS < 0.25 dropped, INP < 500 ms dropped, TTFB < 1800 ms dropped
+  - `'all'`: nothing dropped (threshold = 0, and `0 < 0` is false — a CLS or TTFB of exactly 0 is kept)
 - **Custom thresholds** — override defaults via `webVitalsThresholds`
-- **Deduplication** — prevents duplicate metrics per navigation using unique navigation IDs (except CLS, which accumulates)
+- **Navigation-boundary bookkeeping** — collapses repeat reports of the same metric type into the
+  latest buffered value per navigation (a Map keyed by metric type)
 - **CLS accumulation** — accumulates within a navigation, resets on navigation change
 - **CLS input filtering** — ignores layout shifts caused by recent user input (not counted as poor UX)
 - **Precision control** — all metrics use 2-decimal precision for consistency
-- **Final values only** — all web vitals use `reportAllChanges: false`; only the final metric value is sent
+- **Final values only** — all web vitals use `reportAllChanges: false`
+- **`samplingRate` exemption** — `WEB_VITALS` is exempt from `samplingRate` (but not from rate
+  limiting or session caps): a merchant's sampling rate must never silently thin the Core Web
+  Vitals sample
 
 **Metrics captured:**
 
@@ -247,10 +263,10 @@ await tracelog.init({
 **Default thresholds by mode:**
 
 ```javascript
-// 'all' mode
+// 'all' mode (default)
 { LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0 }
 
-// 'needs-improvement' (default)
+// 'needs-improvement' mode
 { LCP: 2500, FCP: 1800, CLS: 0.1, INP: 200, TTFB: 800 }
 
 // 'poor' mode
@@ -263,40 +279,50 @@ await tracelog.init({
 {
   type: 'web_vitals',
   web_vitals: {
-    type: 'LCP',
-    value: 4247.35,
+    schema: 'consolidated',
+    metrics: [
+      { type: 'TTFB', value: 320.15 },
+      { type: 'FCP', value: 980.42 },
+      { type: 'LCP', value: 1450.35 },
+      { type: 'CLS', value: 0.02 },
+      { type: 'INP', value: 88.7 },
+    ],
   },
 }
 
-// CLS example (unitless)
+// Partial set — metrics arrive at different times, so a flush before every
+// metric has finalized ships whatever was measured so far (never empty)
 {
   type: 'web_vitals',
   web_vitals: {
-    type: 'CLS',
-    value: 0.42,
+    schema: 'consolidated',
+    metrics: [{ type: 'TTFB', value: 320.15 }],
   },
 }
 ```
 
-**Navigation-based deduplication:**
+**Navigation-boundary detection:**
 
-- Each navigation gets a unique ID: `{timestamp}_{pathname}_{random}`
-- Metric types (LCP, FCP, INP, TTFB) are sent **once per navigation**
-- CLS can be sent multiple times as it accumulates; resets on navigation change
-- Memory management: FIFO eviction keeps the last 50 navigations (prevents leaks in long-running SPAs)
+- Each navigation gets a deterministic ID: `{navigationStartTime}_{pathname}` (suffixed with a
+  counter only on a real collision — an SPA revisit to the same path)
+- A metric type reported more than once before flush overwrites the buffered value (last value
+  wins), rather than being dropped
+- Memory management: FIFO eviction keeps the last 50 navigations (prevents leaks in
+  long-running SPAs)
 
 **TTFB special handling:**
 
 - Calculated from `PerformanceNavigationTiming.responseStart`
-- Can be 0 in legitimate scenarios (cache, mobile Safari timing limitations)
-- Zero values are still reported if the threshold is exceeded
+- Can be 0 in legitimate scenarios (cache, mobile Safari timing limitations) — always kept in
+  the default `'all'` mode
 
 **CLS behavior:**
 
 - Accumulates layout-shift values throughout the navigation lifecycle
 - Resets to 0 on navigation-ID change (SPA route transitions)
 - Filters out shifts with `hadRecentInput: true` (user-initiated, not poor UX)
-- Multiple CLS events can be sent per navigation as the value grows
+- The buffered CLS value is overwritten (not summed again) as it grows — the consolidated event
+  ships the final accumulated total, not one entry per accumulation step
 
 ---
 
