@@ -55,9 +55,8 @@ test.describe('E2E: Web Vitals Consolidation', () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Force LCP/CLS/INP finalization and the consolidated-buffer flush,
-      // mirroring a real tab-hide-then-unload sequence. Two dispatches
-      // (visibilitychange then pagehide) tolerate whichever tick the
-      // underlying web-vitals library finalizes each metric on.
+      // mirroring a real tab-hide-then-unload sequence. Both transitions are
+      // dispatched because a real hard navigation fires both.
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
       window.dispatchEvent(new Event('pagehide'));
@@ -70,11 +69,21 @@ test.describe('E2E: Web Vitals Consolidation', () => {
     // This is the regression the bug produced: zero events for a fast page.
     expect(webVitalsEvents.length).toBeGreaterThan(0);
 
+    // ONE navigation ships ONE event. The handler registers its flush listeners
+    // after web-vitals registers its own, so LCP/CLS/INP have already finalized
+    // into the buffer by the time the first transition flushes it — the second
+    // transition then finds an empty buffer. Splitting a navigation across two
+    // events is unmergeable server-side: the payload carries no navigation id.
+    expect(webVitalsEvents).toHaveLength(1);
+
     for (const event of webVitalsEvents) {
       expect(event.web_vitals?.schema).toBe('consolidated');
       expect(Array.isArray(event.web_vitals?.metrics)).toBe(true);
       expect(event.web_vitals?.metrics?.length).toBeGreaterThan(0);
       expect(event.web_vitals?.metrics?.length).toBeLessThanOrEqual(5);
+
+      const types = event.web_vitals?.metrics?.map((metric) => metric.type) ?? [];
+      expect(new Set(types).size).toBe(types.length); // One entry per type — the API rejects duplicates
 
       for (const metric of event.web_vitals?.metrics ?? []) {
         expect(['LCP', 'CLS', 'INP', 'FCP', 'TTFB']).toContain(metric.type);

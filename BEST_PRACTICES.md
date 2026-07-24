@@ -360,9 +360,11 @@ await tracelog.init({ webVitalsMode: 'all' });
 // Opt-in narrowing: only report metrics that need improvement or are poor
 await tracelog.init({ webVitalsMode: 'needs-improvement' });
 
-// Custom thresholds for fine-grained control
+// Custom thresholds, applied per metric on top of the selected mode. Note that
+// an override censors that metric even under 'all': here every LCP at or below
+// 3000 ms and every INP at or below 150 ms is dropped client-side.
 await tracelog.init({
-  webVitalsMode: 'all',
+  webVitalsMode: 'needs-improvement',
   webVitalsThresholds: { LCP: 3000, INP: 150 },
 });
 ```

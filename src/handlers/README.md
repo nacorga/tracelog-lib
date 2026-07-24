@@ -208,10 +208,11 @@ Configurable filtering modes still control which measured *values* are kept.
 **Triggers:**
 
 - `web-vitals` library: `onLCP`, `onCLS`, `onFCP`, `onTTFB`, `onINP` (buffer measurements)
-- `pagehide` / `visibilitychange` (document hidden) — flush the buffer as one event; the same
-  lifecycle points `App` already uses to flush the event queue
+- `pagehide` / `visibilitychange` (document hidden) — flush the buffer as one event, then deliver
+  it immediately via `sendBeacon`
 - A navigation-boundary change (SPA route change) — flushes the previous navigation's buffer,
-  since SPA route changes never fire `pagehide`
+  since SPA route changes never fire `pagehide`. No immediate delivery: the page is not going
+  away, so the normal batch interval ships it
 
 **Configuration:**
 
@@ -231,16 +232,22 @@ await tracelog.init({
   flushed as ONE event on `pagehide`/hidden or a navigation-boundary change. This is what makes
   capturing every value, including good ones, affordable: up to 5 per-metric events collapse
   into 1.
+- **Flush ordering** — the lifecycle listeners are registered only after the `web-vitals` library
+  has registered its own, so LCP/CLS/INP finalize into the buffer before the flush reads it: one
+  navigation ships one event, not an early-metrics event plus a late-metrics one. The flush then
+  drains the queue itself rather than depending on `App`'s listeners running afterwards, which
+  they do not on a prerendered page (`App` defers handler startup to `prerenderingchange`).
 - **Configurable filtering modes** (via `webVitalsMode`), applied per measured value BEFORE
   buffering:
   - `'all'` (default) — buffer every measured value, including good ones (uncensored sample)
   - `'needs-improvement'` — buffer only metrics that exceed the "good" threshold (censors good values)
   - `'poor'` — buffer only poor metrics (most heavily censored)
-- **Threshold reference** (Core Web Vitals standards from web.dev; the comparison is exclusive —
-  a value exactly AT the threshold still passes):
-  - `'needs-improvement'` defaults: LCP < 2500 ms dropped, FCP < 1800 ms dropped, CLS < 0.1 dropped, INP < 200 ms dropped, TTFB < 800 ms dropped
-  - `'poor'` defaults: LCP < 4000 ms dropped, FCP < 3000 ms dropped, CLS < 0.25 dropped, INP < 500 ms dropped, TTFB < 1800 ms dropped
-  - `'all'`: nothing dropped (threshold = 0, and `0 < 0` is false — a CLS or TTFB of exactly 0 is kept)
+- **Threshold reference** (Core Web Vitals standards from web.dev; a value exactly AT a threshold
+  counts as the better band, matching web.dev — an LCP of exactly 2500 ms is good, not
+  needs-improvement):
+  - `'needs-improvement'` defaults: LCP ≤ 2500 ms dropped, FCP ≤ 1800 ms dropped, CLS ≤ 0.1 dropped, INP ≤ 200 ms dropped, TTFB ≤ 800 ms dropped
+  - `'poor'` defaults: LCP ≤ 4000 ms dropped, FCP ≤ 3000 ms dropped, CLS ≤ 0.25 dropped, INP ≤ 500 ms dropped, TTFB ≤ 1800 ms dropped
+  - `'all'`: nothing dropped — no floor at all (`-Infinity`), so a CLS or TTFB of exactly 0 is kept
 - **Custom thresholds** — override defaults via `webVitalsThresholds`
 - **Navigation-boundary bookkeeping** — collapses repeat reports of the same metric type into the
   latest buffered value per navigation (a Map keyed by metric type)
@@ -263,8 +270,8 @@ await tracelog.init({
 **Default thresholds by mode:**
 
 ```javascript
-// 'all' mode (default)
-{ LCP: 0, FCP: 0, CLS: 0, INP: 0, TTFB: 0 }
+// 'all' mode (default) — no floor, nothing is ever dropped
+{ LCP: -Infinity, FCP: -Infinity, CLS: -Infinity, INP: -Infinity, TTFB: -Infinity }
 
 // 'needs-improvement' mode
 { LCP: 2500, FCP: 1800, CLS: 0.1, INP: 200, TTFB: 800 }
@@ -290,13 +297,18 @@ await tracelog.init({
   },
 }
 
-// Partial set — metrics arrive at different times, so a flush before every
-// metric has finalized ships whatever was measured so far (never empty)
+// Partial set — legitimate when a metric never materializes, e.g. no INP on a
+// page the visitor never interacted with (never empty, never a repeated type)
 {
   type: 'web_vitals',
   web_vitals: {
     schema: 'consolidated',
-    metrics: [{ type: 'TTFB', value: 320.15 }],
+    metrics: [
+      { type: 'TTFB', value: 320.15 },
+      { type: 'FCP', value: 980.42 },
+      { type: 'LCP', value: 1450.35 },
+      { type: 'CLS', value: 0.02 },
+    ],
   },
 }
 ```

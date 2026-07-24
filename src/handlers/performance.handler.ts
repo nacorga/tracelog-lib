@@ -1,6 +1,6 @@
 import { EventManager } from '../managers/event.manager';
 import { StateManager } from '../managers/state.manager';
-import { EventType, WebVitalsData, WebVitalType } from '../types';
+import { EventType, WebVitalMetric, WebVitalType } from '../types';
 import {
   MAX_NAVIGATION_HISTORY,
   PRECISION_TWO_DECIMALS,
@@ -35,13 +35,16 @@ type LayoutShiftEntry = PerformanceEntry & { value?: number; hadRecentInput?: bo
  * **Consolidation**: metrics for the current navigation are buffered (not sent
  * individually) and flushed as ONE `WEB_VITALS` event carrying every metric
  * measured so far. The buffer flushes on `pagehide` / `visibilitychange`
- * (document hidden) — the same lifecycle points `App` already uses to flush
- * the event queue — and on a navigation-boundary change (SPA route change,
+ * (document hidden) and on a navigation-boundary change (SPA route change,
  * which never fires `pagehide`). This is what makes capturing every metric,
  * including good ones, affordable: up to 5 per-metric events collapse into 1.
  *
+ * **Flush ordering**: the lifecycle listeners are registered only AFTER the
+ * `web-vitals` library has registered its own, and each flush drains the event
+ * queue itself. Both halves are load-bearing — see `registerLifecycleListeners`.
+ *
  * **Filtering Modes**:
- * - 'all': Track every measured value, including good ones (threshold = 0; default)
+ * - 'all': Track every measured value, including good ones (no threshold; default)
  * - 'needs-improvement': Track metrics exceeding good thresholds (censors good values)
  * - 'poor': Track only critical performance issues (most heavily censored)
  *
@@ -70,13 +73,19 @@ export class PerformanceHandler extends StateManager {
   private readonly currentBuffer: Map<WebVitalType, number> = new Map();
   private currentBufferNavId: string | null = null;
 
+  private isTracking = false;
+  private lifecycleListenersRegistered = false;
+
   private readonly pageHideHandler = (): void => {
-    this.flushConsolidatedVitals();
+    // Unconditional: `flushOnPageHidden` opts out of beaconing when the tab is
+    // merely hidden, not when the page is being torn down. `App`'s own
+    // `pagehide` drain is unconditional for the same reason.
+    this.flushAndDeliver(true);
   };
 
   private readonly visibilityHandler = (): void => {
     if (typeof document !== 'undefined' && document.hidden) {
-      this.flushConsolidatedVitals();
+      this.flushAndDeliver(this.get('config').flushOnPageHidden !== false);
     }
   };
 
@@ -89,13 +98,9 @@ export class PerformanceHandler extends StateManager {
   /**
    * Starts tracking Web Vitals and performance metrics.
    *
-   * Registers the consolidation lifecycle listeners (`pagehide`,
-   * `visibilitychange`) synchronously, BEFORE asynchronously loading the
-   * web-vitals library — this must happen ahead of `App`'s own page-lifecycle
-   * listeners (registered right after `initializeHandlers()` returns) so the
-   * consolidated vitals event lands in the queue before `App` drains it via
-   * `sendBeacon`. Falls back to native Performance Observer API if web-vitals
-   * fails to load.
+   * Loads the web-vitals library, then registers the consolidation lifecycle
+   * listeners (see `registerLifecycleListeners` for why that order matters).
+   * Falls back to native Performance Observer API if web-vitals fails to load.
    *
    * **Configuration**:
    * - Reads webVitalsMode from config ('all', 'needs-improvement', 'poor')
@@ -114,10 +119,49 @@ export class PerformanceHandler extends StateManager {
       this.vitalThresholds = { ...this.vitalThresholds, ...config.webVitalsThresholds };
     }
 
+    this.isTracking = true;
+
+    try {
+      await this.initWebVitals();
+    } finally {
+      // `finally`, not a plain trailing call: if the web-vitals import rejects
+      // in a way the fallback rethrows, the buffer would otherwise fill with
+      // metrics nothing ever flushes.
+      this.registerLifecycleListeners();
+    }
+  }
+
+  /**
+   * Registers the `pagehide` / `visibilitychange` listeners that flush the
+   * consolidated buffer. Two properties make one honest event per navigation:
+   *
+   * 1. **Registered AFTER `initWebVitals()`**, so on the same lifecycle
+   *    dispatch the `web-vitals` library's own hidden/pagehide callbacks — its
+   *    listeners were registered while the import resolved, therefore earlier —
+   *    finalize LCP/CLS/INP into the buffer BEFORE this flush reads it.
+   *    Registering first (or in the constructor) splits every navigation into
+   *    two events: the early metrics (TTFB/FCP) and the late ones. The wire
+   *    payload carries no navigation id, so the server cannot merge that split
+   *    back into one navigation.
+   * 2. **Each flush drains the queue itself** (`flushAndDeliver`) rather than
+   *    relying on `App`'s page-lifecycle listeners running afterwards. `App`
+   *    registers those during `init()`, but on a prerendered page it defers
+   *    handler startup to `prerenderingchange` — inverting the order, so
+   *    `App`'s `sendBeacon` would drain the queue before the vitals event was
+   *    ever added to it, and the event would die with the page.
+   *
+   * Idempotent, and a no-op once `stopTracking()` has run — `startTracking()`
+   * is async, so teardown can land while the import is still in flight.
+   */
+  private registerLifecycleListeners(): void {
+    if (!this.isTracking || this.lifecycleListenersRegistered) {
+      return;
+    }
+
+    this.lifecycleListenersRegistered = true;
+
     window.addEventListener('pagehide', this.pageHideHandler);
     document.addEventListener('visibilitychange', this.visibilityHandler);
-
-    await this.initWebVitals();
   }
 
   /**
@@ -133,6 +177,9 @@ export class PerformanceHandler extends StateManager {
    * - Prevents memory leaks in long-running applications
    */
   stopTracking(): void {
+    this.isTracking = false;
+    this.lifecycleListenersRegistered = false;
+
     this.flushConsolidatedVitals();
 
     window.removeEventListener('pagehide', this.pageHideHandler);
@@ -285,6 +332,10 @@ export class PerformanceHandler extends StateManager {
    * isn't already tracking), flushes whatever was buffered for the previous
    * navigation before starting a fresh one: SPA route changes never fire
    * `pagehide`, so that's the only chance to ship it.
+   *
+   * When no navigation id is available (navigation timing unsupported), the
+   * sample is still buffered — boundaries just stop being detectable, so the
+   * buffer ships on the next lifecycle flush instead. Degraded, never silent.
    */
   private sendVital(sample: { type: WebVitalType; value: number }): void {
     if (!this.shouldSendVital(sample.type, sample.value)) {
@@ -320,13 +371,15 @@ export class PerformanceHandler extends StateManager {
    * and clears the buffer. No-op when nothing is buffered — safe to call
    * from both lifecycle listeners on every `pagehide`/hidden transition, and
    * from `sendVital` on every navigation-boundary change.
+   *
+   * @returns `true` when an event was tracked, `false` when the buffer was empty
    */
-  private flushConsolidatedVitals(): void {
+  private flushConsolidatedVitals(): boolean {
     if (this.currentBuffer.size === 0) {
-      return;
+      return false;
     }
 
-    const metrics: WebVitalsData[] = Array.from(this.currentBuffer, ([type, value]) => ({ type, value }));
+    const metrics: WebVitalMetric[] = Array.from(this.currentBuffer, ([type, value]) => ({ type, value }));
     this.currentBuffer.clear();
 
     this.eventManager.track({
@@ -336,6 +389,28 @@ export class PerformanceHandler extends StateManager {
         metrics,
       },
     });
+
+    return true;
+  }
+
+  /**
+   * Flushes the buffer and, when it produced an event, delivers it right away
+   * instead of leaving it for the next batch interval — the page is going away.
+   *
+   * `App` drains on the same transitions, but its listeners run BEFORE this one
+   * (see `registerLifecycleListeners`), so by the time the consolidated event is
+   * queued that drain has already happened. Draining here is what gets it out.
+   *
+   * @param canDeliver `false` when the caller must honour `flushOnPageHidden`
+   *        being disabled — the event is still queued and ships on the
+   *        `pagehide` drain instead.
+   */
+  private flushAndDeliver(canDeliver: boolean): void {
+    if (!this.flushConsolidatedVitals() || !canDeliver) {
+      return;
+    }
+
+    this.eventManager.flushImmediatelySync();
   }
 
   /**
@@ -438,12 +513,14 @@ export class PerformanceHandler extends StateManager {
   }
 
   /**
-   * `<` not `<=`: a value exactly AT the threshold must still pass. This
-   * matters most in 'all' mode, where every threshold is mapped to `0`
-   * (`getWebVitalsThresholds`) — with `<=`, a CLS of exactly `0` or a TTFB of
-   * exactly `0` would be silently dropped even though 'all' means "track
-   * everything". TTFB legitimately reads `0` in Mobile Safari when the
-   * response is served from cache (see `reportTTFB`'s comment).
+   * `<=`: a value exactly AT the "good" boundary is good, matching web.dev's
+   * classification — an LCP of exactly 2500 ms is not "needs improvement".
+   *
+   * 'all' mode keeps everything not by relying on that comparison but by having
+   * no floor at all (`WEB_VITALS_ALL_THRESHOLDS` is `-Infinity`), so the
+   * legitimate zeros survive: CLS is exactly `0` on a page that never shifts,
+   * and TTFB reads `0` in Mobile Safari when the response is served from cache
+   * (see `reportTTFB`'s comment).
    */
   private shouldSendVital(type: WebVitalType, value?: number): boolean {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -453,7 +530,7 @@ export class PerformanceHandler extends StateManager {
 
     const threshold = this.vitalThresholds[type];
 
-    if (typeof threshold === 'number' && value < threshold) {
+    if (typeof threshold === 'number' && value <= threshold) {
       return false;
     }
 

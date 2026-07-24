@@ -21,7 +21,7 @@ import { MOCK_DEVICE_INFO } from '../../helpers/fixtures.helper';
 import { EventManager } from '../../../src/managers/event.manager';
 import { StorageManager } from '../../../src/managers/storage.manager';
 import { EventType } from '../../../src/types';
-import type { WebVitalsData } from '../../../src/types';
+import type { WebVitalMetric } from '../../../src/types';
 
 describe('EventManager - Web Vitals consolidation', () => {
   let eventManager: EventManager;
@@ -43,7 +43,7 @@ describe('EventManager - Web Vitals consolidation', () => {
     cleanupTestEnvironment();
   });
 
-  const trackVital = (metrics: WebVitalsData[]): void => {
+  const trackVital = (metrics: WebVitalMetric[]): void => {
     eventManager.track({
       type: EventType.WEB_VITALS,
       web_vitals: { schema: 'consolidated', metrics },

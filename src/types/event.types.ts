@@ -154,14 +154,23 @@ export interface EventOptions {
 }
 
 /**
- * Web performance metrics data
+ * One measured Web Vitals metric — an entry inside a consolidated sample's
+ * `metrics` array, never a payload on its own.
  */
-export interface WebVitalsData {
+export interface WebVitalMetric {
   /** Type of performance metric */
   type: WebVitalType;
   /** Metric value (varies by type) */
   value: number;
 }
+
+/**
+ * @deprecated Renamed to {@link WebVitalMetric}. Kept as an alias so existing
+ * imports keep compiling; it now names a single entry of
+ * {@link WebVitalsConsolidatedData.metrics}, not the whole `web_vitals` payload
+ * (which is {@link WebVitalsConsolidatedData} as of the consolidated shape).
+ */
+export type WebVitalsData = WebVitalMetric;
 
 /**
  * Explicit discriminator for the consolidated web-vitals wire shape. The server
@@ -176,15 +185,17 @@ export type WebVitalsSchema = 'consolidated';
  * the legacy one-event-per-metric shape, which pre-filtered client-side
  * (a censored sample) and could emit up to five events per navigation.
  *
- * Metrics arrive at different times within a navigation (FCP/TTFB early,
- * LCP/INP/CLS at page hide), so `metrics` may carry a partial set — 1 to 5
- * entries, one per `WebVitalType`.
+ * The buffer is flushed only after the `web-vitals` library has finalized its
+ * own metrics for the same lifecycle transition, so a navigation normally ships
+ * exactly one event. `metrics` can still be a partial set (1–5 entries, one per
+ * `WebVitalType`) when a metric never materializes — e.g. INP on a page the
+ * visitor never interacted with.
  */
 export interface WebVitalsConsolidatedData {
   /** Discriminator the server reads to distinguish this from the legacy shape */
   schema: WebVitalsSchema;
-  /** Every metric measured for this navigation so far (non-empty, max 5) */
-  metrics: WebVitalsData[];
+  /** Every metric measured for this navigation (non-empty, max 5, one per type) */
+  metrics: WebVitalMetric[];
 }
 
 /**

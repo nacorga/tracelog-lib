@@ -765,7 +765,7 @@ carrying every metric measured so far (not one event per metric).
     metrics: Array<{
       type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
       value: number;
-    }>; // 1–5 entries — partial sets are normal (metrics finalize at different times)
+    }>; // 1–5 entries, one per type — partial when a metric never materializes
   };
 }
 ```
@@ -779,10 +779,16 @@ carrying every metric measured so far (not one event per metric).
 | `TTFB` | Time to First Byte        | milliseconds    |
 
 Metrics are buffered per navigation and flushed as one event on `pagehide` /
-`visibilitychange` (document hidden) — the same lifecycle points the queue
-itself flushes on — or when a new navigation starts (SPA route change).
+`visibilitychange` (document hidden), or when a new navigation starts (SPA route
+change). A navigation normally produces exactly one event: the flush runs after
+the `web-vitals` library has finalized LCP/CLS/INP for the same transition, so
+they are already in the buffer. `metrics` can still be partial when a metric
+never materializes — e.g. no `INP` on a page the visitor never interacted with.
+
 `webVitalsMode`/`webVitalsThresholds` still control which measured values are
-kept; the default (`'all'`) keeps everything, including good values.
+kept; the default (`'all'`) keeps everything, including good values. `WEB_VITALS`
+is exempt from `samplingRate` so a merchant's sampling rate cannot silently thin
+the Core Web Vitals sample.
 
 ---
 
@@ -907,8 +913,8 @@ import {
   ScrollData,
   ClickData,
   CustomEventData,
-  WebVitalsData,
-  WebVitalsConsolidatedData,
+  WebVitalsConsolidatedData, // the `web_vitals` payload
+  WebVitalMetric, // one entry of its `metrics` array (`WebVitalsData` is a deprecated alias)
   ErrorData,
   PageViewData,
   UTM,

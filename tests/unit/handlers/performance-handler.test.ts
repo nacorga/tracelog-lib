@@ -393,6 +393,14 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
     web_vitals?: { schema: string; metrics: { type: string; value: number }[] };
   }
 
+  // Typed view of the private members the tests drive directly, so spies keep
+  // their real signatures instead of collapsing to `any`.
+  interface PerformanceHandlerInternals {
+    initWebVitals: () => Promise<void>;
+  }
+
+  const internals = (): PerformanceHandlerInternals => handler as unknown as PerformanceHandlerInternals;
+
   const setPathname = (pathname: string): void => {
     Object.defineProperty(window, 'location', {
       value: { pathname, href: `http://localhost:3000${pathname}`, hostname: 'localhost' },
@@ -473,18 +481,56 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
     expect(checkoutId).toContain('/checkout');
   });
 
-  describe('threshold filtering (default "all" mode)', () => {
-    it('keeps a CLS of exactly 0', () => {
-      expect((handler as any).shouldSendVital('CLS', 0)).toBe(true);
+  describe('threshold filtering', () => {
+    const startWithMode = async (mode: string): Promise<void> => {
+      (handler as any).set('config', { webVitalsMode: mode });
+      vi.spyOn(internals(), 'initWebVitals').mockResolvedValue(undefined);
+      await handler.startTracking();
+    };
+
+    describe('default "all" mode', () => {
+      it('keeps a CLS of exactly 0', () => {
+        expect((handler as any).shouldSendVital('CLS', 0)).toBe(true);
+      });
+
+      it('keeps a TTFB of exactly 0 (legitimate on a Mobile Safari cached response)', () => {
+        expect((handler as any).shouldSendVital('TTFB', 0)).toBe(true);
+      });
+
+      it('keeps any other finite non-negative value', () => {
+        expect((handler as any).shouldSendVital('LCP', 1)).toBe(true);
+        expect((handler as any).shouldSendVital('INP', 0)).toBe(true);
+      });
+
+      it('rejects a non-finite value', () => {
+        expect((handler as any).shouldSendVital('LCP', Number.NaN)).toBe(false);
+        expect((handler as any).shouldSendVital('LCP', Number.POSITIVE_INFINITY)).toBe(false);
+        expect((handler as any).shouldSendVital('LCP', undefined)).toBe(false);
+      });
     });
 
-    it('keeps a TTFB of exactly 0 (legitimate on a Mobile Safari cached response)', () => {
-      expect((handler as any).shouldSendVital('TTFB', 0)).toBe(true);
-    });
+    describe('narrowing modes classify the boundary as web.dev does', () => {
+      it('drops a value exactly AT the good threshold in "needs-improvement" mode', async () => {
+        await startWithMode('needs-improvement');
 
-    it('keeps any other finite non-negative value', () => {
-      expect((handler as any).shouldSendVital('LCP', 1)).toBe(true);
-      expect((handler as any).shouldSendVital('INP', 0)).toBe(true);
+        expect((handler as any).shouldSendVital('LCP', 2500)).toBe(false);
+        expect((handler as any).shouldSendVital('CLS', 0.1)).toBe(false);
+        expect((handler as any).shouldSendVital('LCP', 2500.01)).toBe(true);
+      });
+
+      it('drops a value exactly AT the poor threshold in "poor" mode', async () => {
+        await startWithMode('poor');
+
+        expect((handler as any).shouldSendVital('LCP', 4000)).toBe(false);
+        expect((handler as any).shouldSendVital('LCP', 4000.01)).toBe(true);
+      });
+
+      it('falls back to the uncensored default rather than censoring on an unrecognized mode', async () => {
+        await startWithMode('nonsense-mode');
+
+        expect((handler as any).shouldSendVital('CLS', 0)).toBe(true);
+        expect((handler as any).shouldSendVital('LCP', 1)).toBe(true);
+      });
     });
   });
 
@@ -603,6 +649,46 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
       expect(docAddSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     });
 
+    it('registers its listeners only AFTER web-vitals registered its own, so one navigation ships one event', async () => {
+      const webVitalsListener = (): void => {};
+      const docAddSpy = vi.spyOn(document, 'addEventListener');
+
+      // Stands in for the web-vitals library: it registers its own hidden/pagehide
+      // callbacks (which finalize LCP/CLS/INP) while the dynamic import resolves.
+      vi.spyOn(internals(), 'initWebVitals').mockImplementation(async (): Promise<void> => {
+        await Promise.resolve();
+        document.addEventListener('visibilitychange', webVitalsListener);
+      });
+
+      await handler.startTracking();
+
+      const visibilityListeners = docAddSpy.mock.calls
+        .filter(([type]) => type === 'visibilitychange')
+        .map(([, listener]) => listener);
+
+      expect(visibilityListeners).toEqual([webVitalsListener, (handler as any).visibilityHandler]);
+
+      document.removeEventListener('visibilitychange', webVitalsListener);
+    });
+
+    it('does not register listeners when stopTracking() lands while initialization is in flight', async () => {
+      let resolveInit: (() => void) | undefined;
+      const pendingInit = new Promise<void>((resolve) => {
+        resolveInit = resolve;
+      });
+
+      vi.spyOn(internals(), 'initWebVitals').mockReturnValue(pendingInit);
+
+      const docAddSpy = vi.spyOn(document, 'addEventListener');
+      const startPromise = handler.startTracking();
+
+      handler.stopTracking();
+      resolveInit?.();
+      await startPromise;
+
+      expect(docAddSpy).not.toHaveBeenCalledWith('visibilitychange', (handler as any).visibilityHandler);
+    });
+
     it('removes pagehide and visibilitychange listeners on stopTracking()', async () => {
       await handler.startTracking();
 
@@ -621,6 +707,69 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
       handler.stopTracking();
 
       expect(trackedVitals('CLS')).toEqual([{ type: 'CLS', value: 0.2 }]);
+    });
+  });
+
+  describe('delivery on lifecycle flush', () => {
+    let flushSyncSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      flushSyncSpy = vi.spyOn(eventManager, 'flushImmediatelySync').mockReturnValue(true);
+    });
+
+    it('drains the queue on pagehide, instead of relying on App draining afterwards', () => {
+      sendVital('LCP', 3000);
+
+      (handler as any).pageHideHandler();
+
+      expect(trackSpy).toHaveBeenCalledTimes(1);
+      expect(flushSyncSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('drains the queue when the document is hidden', () => {
+      sendVital('FCP', 1200);
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+
+      (handler as any).visibilityHandler();
+
+      expect(flushSyncSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not drain when nothing was buffered', () => {
+      (handler as any).pageHideHandler();
+
+      expect(trackSpy).not.toHaveBeenCalled();
+      expect(flushSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('queues without draining on hidden when flushOnPageHidden is disabled', () => {
+      (handler as any).set('config', { flushOnPageHidden: false });
+      sendVital('FCP', 1200);
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+
+      (handler as any).visibilityHandler();
+
+      expect(trackedVitals('FCP')).toEqual([{ type: 'FCP', value: 1200 }]);
+      expect(flushSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('still drains on pagehide even when flushOnPageHidden is disabled', () => {
+      (handler as any).set('config', { flushOnPageHidden: false });
+      sendVital('FCP', 1200);
+
+      (handler as any).pageHideHandler();
+
+      expect(flushSyncSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not drain on an SPA navigation boundary — the page is not going away', () => {
+      sendVital('LCP', 5000);
+
+      setPathname('/checkout');
+      sendVital('LCP', 2000);
+
+      expect(trackSpy).toHaveBeenCalledTimes(1);
+      expect(flushSyncSpy).not.toHaveBeenCalled();
     });
   });
 
