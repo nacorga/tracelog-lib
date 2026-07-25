@@ -8,7 +8,10 @@ TraceLog is a **client-first analytics library** that captures user interactions
 
 **Core Principle**: Client-only first. Events captured locally, network requests are opt-in.
 
-**No internal task/audit refs**: code comments, test/`describe` names, and docs describe *behavior*, never the task/audit that produced it — no `WP3`, `P0-1`, `DA-5`, `audit Finding N`, `task N`, `§N`, `ui-big-bang`, short codes `(A4)`/`(T15)`. Cite external RFCs as "section N". Enforced write-time by `.claude/hooks/lint-patterns.sh` (covers `src/`, `tests/`, `docs/`; `docs/tasks/` exempt). See memory `no-task-refs-in-page-docs`.
+**No internal task/audit refs**: code comments, test/`describe` names, and docs describe *behavior*,
+never the task/audit that produced it — no `WP3`, `P0-1`, `DA-5`, `audit Finding N`, `task N`,
+`§N`, `ui-big-bang`, or short codes `(A4)`/`(T15)`. Cite external RFCs as "section N". Enforced
+write-time by `.claude/hooks/lint-patterns.sh`.
 
 ---
 

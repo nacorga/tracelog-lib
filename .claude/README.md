@@ -6,20 +6,15 @@ Quick reference for skills, commands, agents, and hooks available in this repo.
 
 No package-level skills. Uses shared monorepo skills from project root:
 
-| Skill                | When to use                                                                               | Invocation                 |
-| -------------------- | ----------------------------------------------------------------------------------------- | -------------------------- |
-| **review-staged**    | Pre-commit review of staged changes. Runs `clean-code-architect` + `tracelog-specialist`. | `/review-staged`           |
-| **review-fullstack** | Full-stack branch review before merge. Validates cross-package coherence.                 | `/review-fullstack [base]` |
-| **sync-types**       | Compare tracelog-api DTOs with tracelog-app interfaces and report mismatches.             | `/sync-types`              |
+| Skill                | When to use                                                                                                | Invocation                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------- |
+| **review-staged**    | Pre-commit review of staged changes against the shared check-catalog (runs **as** `clean-code-architect`). | `/review-staged`           |
+| **review-fullstack** | Full-stack branch review before merge. Validates cross-package coherence.                                  | `/review-fullstack [base]` |
+| **sync-types**       | Compare tracelog-api DTOs with tracelog-app interfaces and report mismatches.                              | `/sync-types`              |
 
 ## Commands
 
-Defined in `.claude/commands/`. Invocable via `/slash-command`.
-
-| Command | Purpose |
-| ------- | ------- |
-
-_(Package-specific commands removed in cleanup — use root skills like `/review-staged`, `/review-fullstack`, and `/sync-types`, plus `npm run` scripts for build/test/lint.)_
+_(Package-specific commands were removed in cleanup — there is no `.claude/commands/` directory. Use root skills like `/review-staged`, `/review-fullstack`, and `/sync-types`, plus `npm run` scripts for build/test/lint.)_
 
 ## Agents
 

@@ -26,7 +26,7 @@ export const SHOPIFY_PIXEL_EVENT_NAMES = SHOPIFY_EVENTS.map((name) => `shopify_$
 export type ShopifyPixelEventName = (typeof SHOPIFY_PIXEL_EVENT_NAMES)[number];
 
 /**
- * Spike-confirmed shape ([04-spike-report.md](../../docs/tasks/shopify-hybrid-capture/04-spike-report.md)):
+ * Shopify Web Pixel attributes use this confirmed runtime shape:
  * `event.data.{cart,checkout}.attributes` is `Array<{key, value, __typename?}>`,
  * NOT a plain object. `__typename: 'NoteAttribute'` is added on `checkout_completed`
  * only — harmless because we lookup by `key`.

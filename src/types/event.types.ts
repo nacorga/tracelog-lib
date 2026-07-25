@@ -154,13 +154,48 @@ export interface EventOptions {
 }
 
 /**
- * Web performance metrics data
+ * One measured Web Vitals metric — an entry inside a consolidated sample's
+ * `metrics` array, never a payload on its own.
  */
-export interface WebVitalsData {
+export interface WebVitalMetric {
   /** Type of performance metric */
   type: WebVitalType;
   /** Metric value (varies by type) */
   value: number;
+}
+
+/**
+ * @deprecated Renamed to {@link WebVitalMetric}. Kept as an alias so existing
+ * imports keep compiling; it now names a single entry of
+ * {@link WebVitalsConsolidatedData.metrics}, not the whole `web_vitals` payload
+ * (which is {@link WebVitalsConsolidatedData} as of the consolidated shape).
+ */
+export type WebVitalsData = WebVitalMetric;
+
+/**
+ * Explicit discriminator for the consolidated web-vitals wire shape. The server
+ * reads this field to tell an honest (uncensored) sample from the legacy
+ * per-metric one — never inferred from field presence.
+ */
+export type WebVitalsSchema = 'consolidated';
+
+/**
+ * One consolidated Web Vitals sample: every metric measured for a single
+ * navigation, uncensored, emitted as a single `WEB_VITALS` event. Replaces
+ * the legacy one-event-per-metric shape, which pre-filtered client-side
+ * (a censored sample) and could emit up to five events per navigation.
+ *
+ * The buffer is flushed only after the `web-vitals` library has finalized its
+ * own metrics for the same lifecycle transition, so a navigation normally ships
+ * exactly one event. `metrics` can still be a partial set (1–5 entries, one per
+ * `WebVitalType`) when a metric never materializes — e.g. INP on a page the
+ * visitor never interacted with.
+ */
+export interface WebVitalsConsolidatedData {
+  /** Discriminator the server reads to distinguish this from the legacy shape */
+  schema: WebVitalsSchema;
+  /** Every metric measured for this navigation (non-empty, max 5, one per type) */
+  metrics: WebVitalMetric[];
 }
 
 /**
@@ -251,7 +286,7 @@ export interface EventData {
   /** Custom event details (when type is CUSTOM) */
   custom_event?: CustomEventData;
   /** Performance metrics (when type is WEB_VITALS) */
-  web_vitals?: WebVitalsData;
+  web_vitals?: WebVitalsConsolidatedData;
   /** Page view details (when type is PAGE_VIEW) */
   page_view?: PageViewData;
   /** Error details (when type is ERROR) */

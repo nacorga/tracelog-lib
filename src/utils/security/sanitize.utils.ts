@@ -128,6 +128,6 @@ export const sanitizeMetadata = (metadata: unknown): Record<string, MetadataType
     return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`);
+    throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`, { cause: error });
   }
 };
