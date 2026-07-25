@@ -583,6 +583,24 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
       expect(trackSpy).not.toHaveBeenCalled();
     });
 
+    it('emits metrics sorted by type regardless of the order they arrived in', () => {
+      sendVital('INP', 150);
+      sendVital('TTFB', 300);
+      sendVital('CLS', 0.05);
+      sendVital('LCP', 2000);
+      sendVital('FCP', 900);
+
+      flush();
+
+      expect(trackedPayloads()[0]?.web_vitals?.metrics.map((m: { type: string }) => m.type)).toEqual([
+        'CLS',
+        'FCP',
+        'INP',
+        'LCP',
+        'TTFB',
+      ]);
+    });
+
     it('should suffix only on a real collision (SPA revisit to the same path), shipping each navigation as its own event', () => {
       sendVital('LCP', 5000); // Buffers the first navigation ('/')
       const firstId = getNavId();
@@ -645,8 +663,8 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
 
       await handler.startTracking();
 
-      expect(windowAddSpy).toHaveBeenCalledWith('pagehide', expect.any(Function));
-      expect(docAddSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+      expect(windowAddSpy).toHaveBeenCalledWith('pagehide', (handler as any).pageHideHandler);
+      expect(docAddSpy).toHaveBeenCalledWith('visibilitychange', (handler as any).visibilityHandler);
     });
 
     it('registers its listeners only AFTER web-vitals registered its own, so one navigation ships one event', async () => {
@@ -689,16 +707,26 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
       expect(docAddSpy).not.toHaveBeenCalledWith('visibilitychange', (handler as any).visibilityHandler);
     });
 
-    it('removes pagehide and visibilitychange listeners on stopTracking()', async () => {
+    it('removes the SAME listener references it registered on stopTracking()', async () => {
+      const windowAddSpy = vi.spyOn(window, 'addEventListener');
+      const docAddSpy = vi.spyOn(document, 'addEventListener');
+
       await handler.startTracking();
+
+      const registeredPageHide = windowAddSpy.mock.calls.find(([type]) => type === 'pagehide')?.[1];
+      const registeredVisibility = docAddSpy.mock.calls.find(([type]) => type === 'visibilitychange')?.[1];
 
       const windowRemoveSpy = vi.spyOn(window, 'removeEventListener');
       const docRemoveSpy = vi.spyOn(document, 'removeEventListener');
 
       handler.stopTracking();
 
-      expect(windowRemoveSpy).toHaveBeenCalledWith('pagehide', expect.any(Function));
-      expect(docRemoveSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+      // Identity, not `expect.any(Function)`: removing a different reference than
+      // was added is the classic listener leak, and it would satisfy a loose matcher.
+      expect(registeredPageHide).toBeDefined();
+      expect(registeredVisibility).toBeDefined();
+      expect(windowRemoveSpy).toHaveBeenCalledWith('pagehide', registeredPageHide);
+      expect(docRemoveSpy).toHaveBeenCalledWith('visibilitychange', registeredVisibility);
     });
 
     it('flushes any buffered metrics on stopTracking() (no data loss on destroy)', () => {

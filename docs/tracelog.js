@@ -5146,7 +5146,9 @@ class PerformanceHandler extends StateManager {
     if (this.currentBuffer.size === 0) {
       return false;
     }
-    const metrics = Array.from(this.currentBuffer, ([type, value]) => ({ type, value }));
+    const metrics = Array.from(this.currentBuffer, ([type, value]) => ({ type, value })).sort(
+      (a2, b2) => a2.type.localeCompare(b2.type)
+    );
     this.currentBuffer.clear();
     this.eventManager.track({
       type: EventType.WEB_VITALS,

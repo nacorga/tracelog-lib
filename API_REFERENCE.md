@@ -765,7 +765,7 @@ carrying every metric measured so far (not one event per metric).
     metrics: Array<{
       type: 'LCP' | 'CLS' | 'INP' | 'FCP' | 'TTFB';
       value: number;
-    }>; // 1–5 entries, one per type — partial when a metric never materializes
+    }>; // 1–5 entries, one per type, sorted by type — partial when a metric never materializes
   };
 }
 ```

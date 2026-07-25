@@ -379,7 +379,15 @@ export class PerformanceHandler extends StateManager {
       return false;
     }
 
-    const metrics: WebVitalMetric[] = Array.from(this.currentBuffer, ([type, value]) => ({ type, value }));
+    // Sorted by type, not left in arrival order: the payload is a wire contract,
+    // and a canonical order makes two samples directly comparable — including by
+    // `EventManager`'s dedup fingerprint, which stringifies this object and would
+    // otherwise treat the same measurements as different when they arrived in a
+    // different sequence. Arrival order carries no meaning downstream (the API
+    // validates one entry per type, never position).
+    const metrics: WebVitalMetric[] = Array.from(this.currentBuffer, ([type, value]) => ({ type, value })).sort(
+      (a, b) => a.type.localeCompare(b.type),
+    );
     this.currentBuffer.clear();
 
     this.eventManager.track({

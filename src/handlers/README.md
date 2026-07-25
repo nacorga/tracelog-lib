@@ -283,16 +283,18 @@ await tracelog.init({
 **Event data:**
 
 ```javascript
+// `metrics` is sorted by type, not left in arrival order, so two samples are
+// directly comparable
 {
   type: 'web_vitals',
   web_vitals: {
     schema: 'consolidated',
     metrics: [
-      { type: 'TTFB', value: 320.15 },
-      { type: 'FCP', value: 980.42 },
-      { type: 'LCP', value: 1450.35 },
       { type: 'CLS', value: 0.02 },
+      { type: 'FCP', value: 980.42 },
       { type: 'INP', value: 88.7 },
+      { type: 'LCP', value: 1450.35 },
+      { type: 'TTFB', value: 320.15 },
     ],
   },
 }
@@ -304,10 +306,10 @@ await tracelog.init({
   web_vitals: {
     schema: 'consolidated',
     metrics: [
-      { type: 'TTFB', value: 320.15 },
+      { type: 'CLS', value: 0.02 },
       { type: 'FCP', value: 980.42 },
       { type: 'LCP', value: 1450.35 },
-      { type: 'CLS', value: 0.02 },
+      { type: 'TTFB', value: 320.15 },
     ],
   },
 }
@@ -319,6 +321,8 @@ await tracelog.init({
   counter only on a real collision — an SPA revisit to the same path)
 - A metric type reported more than once before flush overwrites the buffered value (last value
   wins), rather than being dropped
+- The flushed `metrics` array is sorted by type, so the payload is canonical rather than dependent
+  on the order metrics happened to finalize in
 - Memory management: FIFO eviction keeps the last 50 navigations (prevents leaks in
   long-running SPAs)
 
