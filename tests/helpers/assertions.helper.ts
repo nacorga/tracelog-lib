@@ -131,18 +131,29 @@ export function expectCustomEvent(event: any, expectedName?: string): void {
 }
 
 /**
- * Validate web vitals event has required fields
+ * Validate a consolidated web vitals event: one event per navigation carrying
+ * every metric measured for it, as `{ schema: 'consolidated', metrics: [...] }`.
+ *
+ * @param expectedMetric when given, asserts `metrics` carries an entry of that type
  */
 export function expectWebVitalsEvent(event: any, expectedMetric?: string): void {
   expectEventStructure(event);
   expectEventType(event, EventType.WEB_VITALS);
   expect(event.web_vitals).toBeDefined();
-  expect(event.web_vitals.name).toBeTypeOf('string');
-  expect(event.web_vitals.value).toBeTypeOf('number');
-  expect(event.web_vitals.rating).toMatch(/good|needs-improvement|poor/);
+  expect(event.web_vitals.schema).toBe('consolidated');
+  expect(Array.isArray(event.web_vitals.metrics)).toBe(true);
+  expect(event.web_vitals.metrics.length).toBeGreaterThan(0);
+
+  const types = event.web_vitals.metrics.map((metric: { type: string }) => metric.type);
+  expect(new Set(types).size).toBe(types.length); // One entry per type — the API rejects duplicates
+
+  for (const metric of event.web_vitals.metrics) {
+    expect(metric.type).toBeTypeOf('string');
+    expect(metric.value).toBeTypeOf('number');
+  }
 
   if (expectedMetric) {
-    expect(event.web_vitals.name).toBe(expectedMetric);
+    expect(types).toContain(expectedMetric);
   }
 }
 

@@ -13,7 +13,7 @@ Core business-logic components that handle event processing, state, sessions, tr
 - **Deduplication** — LRU cache with 1000-entry fingerprint storage; 10px coordinate precision for click events; 500ms time threshold; auto-prunes fingerprints older than 5 s
 - **Per-session caps** — total 1000 events / session, plus type-specific caps (clicks 500, page views 100, custom 500, scroll 120)
 - **Per-event-name rate limiting** — 60 events/min by default (configurable via `maxSameEventPerMinute`)
-- **Sampling** — client-side via `samplingRate` (0–1); error-specific via `errorSampling`
+- **Sampling** — client-side via `samplingRate` (0–1); error-specific via `errorSampling`. `WEB_VITALS` (and `SESSION_START`) are exempt from `samplingRate` — a merchant's sampling rate must never silently thin the Core Web Vitals sample
 - **Pending-events buffer** — buffers up to 100 events before session initialization; flushed once the session starts
 - **Event recovery** — recovers persisted events from `localStorage` after crashes or network failures
 - **Standalone-mode support** — when no integrations are configured, emits queue events locally and clears them without a network send

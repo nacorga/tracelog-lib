@@ -513,8 +513,9 @@ export class SenderManager extends StateManager {
         if (error instanceof RateLimitError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
-          allTimeouts = false;
-          hadHttpResponse = true;
+          // No `allTimeouts` / `hadHttpResponse` bookkeeping: this branch breaks
+          // out of the retry loop, and both are only read on the last-attempt
+          // path below, which the break skips.
           this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log('warn', 'Rate limited, skipping retries', {
             data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS },
@@ -770,9 +771,7 @@ export class SenderManager extends StateManager {
     const cutoff = Date.now() - MAX_EVENT_AGE_MS_ON_RECOVERY;
     const filteredEvents = originalEvents.filter((event) => {
       const eventTimestamp =
-        typeof event.timestamp === 'number'
-          ? event.timestamp
-          : new Date(event.timestamp as unknown as string).getTime();
+        typeof event.timestamp === 'number' ? event.timestamp : new Date(event.timestamp).getTime();
       return Number.isFinite(eventTimestamp) && eventTimestamp >= cutoff;
     });
 
@@ -801,7 +800,7 @@ export class SenderManager extends StateManager {
     try {
       const existing = this.getPersistedData();
 
-      if (!skipThrottle && existing && existing.timestamp) {
+      if (!skipThrottle && typeof existing?.timestamp === 'number') {
         const timeSinceExisting = Date.now() - existing.timestamp;
 
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
@@ -845,8 +844,7 @@ export class SenderManager extends StateManager {
     const now = Date.now();
     const key = `${error.statusCode ?? 'unknown'}:${error.responseCode ?? ''}`;
     const shouldLog =
-      !this.lastPermanentErrorLog ||
-      this.lastPermanentErrorLog.key !== key ||
+      this.lastPermanentErrorLog?.key !== key ||
       now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
 
     if (shouldLog) {

@@ -56,7 +56,7 @@ describe('registerShopifyPixel', () => {
   it('forwards events with valid identity to sendBatch', () => {
     registerShopifyPixel({ analytics: { subscribe: subscribeSpy } }, { projectId: 'proj-1' });
 
-    const callback = subscribeSpy.mock.calls.find((c) => c[0] === 'checkout_started')![1] as (e: unknown) => void;
+    const callback = subscribeSpy.mock.calls.find((c) => c[0] === 'checkout_started')![1];
     callback({
       id: 'evt-1',
       timestamp: '2026-05-08T16:19:32.533Z',
@@ -77,7 +77,7 @@ describe('registerShopifyPixel', () => {
   it('drops events without identity (no fetch issued)', () => {
     registerShopifyPixel({ analytics: { subscribe: subscribeSpy } }, { projectId: 'proj-1' });
 
-    const callback = subscribeSpy.mock.calls.find((c) => c[0] === 'cart_viewed')![1] as (e: unknown) => void;
+    const callback = subscribeSpy.mock.calls.find((c) => c[0] === 'cart_viewed')![1];
     callback({
       id: 'evt-1',
       timestamp: '2026-05-08T16:19:32.533Z',

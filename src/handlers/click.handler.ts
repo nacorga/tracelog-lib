@@ -368,7 +368,7 @@ export class ClickHandler extends StateManager {
       return '';
     }
 
-    let finalText = '';
+    let finalText: string;
 
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       finalText = clickedText;
