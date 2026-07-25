@@ -29,6 +29,47 @@
 
 
 
+
+## [3.4.0] - 2026-07-25
+
+### ✨ Features
+
+- Ensure web vitals metrics are sorted by type in emitted events and update documentation ([81b6577](../../commit/81b6577b451d84c224d5a83eadafc79aaff41248))
+- Emit one uncensored consolidated web-vitals event per navigation [TRA-279] ([3f42a1a](../../commit/3f42a1ad0938f2caed6cc6308fdc927f19e471d3))
+- Update lint-patterns script to load rules dynamically and improve error messaging ([1de3b9f](../../commit/1de3b9f2eae9a1666142e9c7ca8db0795638d2e0))
+- Enhance README and settings with new hooks for documentation checks and quality assurance ([03affa6](../../commit/03affa61b38d0454e06cfd8befa202ca11377073))
+- Update lint patterns and documentation for Shopify Web Pixel integration ([1e8cde8](../../commit/1e8cde83749e08cfe3ef8579b6c7cbcdf4bb1700))
+- Add unit tests for Shopify Custom Web Pixel snippet exports ([a42aa0b](../../commit/a42aa0b04118a4a779e5cc18587c7fa394eb8bef))
+- Add Shopify Custom Web Pixel snippet entry point ([10f4278](../../commit/10f4278d03056153cea7b2d74b4e48c70dfd7d2e))
+
+### 🧪 Tests
+
+- Replace no-op web-vitals suites with a real degradation case ([6a7056f](../../commit/6a7056f4ca65143a862edd9685f24a74297b5c64))
+
+### ♻️ Refactoring
+
+- Update Web Vitals handling and thresholds ([375abe1](../../commit/375abe1c0307e0339f7a6a93bcdbb3db52f80fea))
+
+### 🔧 Other Changes
+
+- Merge pull request #128 from nacorga/release/20260725.1 ([ea2c239](../../commit/ea2c2391d08fd2fa66bfbe99f3eb72d37d028e8c))
+- Merge pull request #127 from nacorga/feature/TRA-279-consolidated-vitals-emit ([c730c95](../../commit/c730c955f15fa7472092e73baca1308fb126a334))
+- Update dependencies and improve error handling ([b5b47c2](../../commit/b5b47c22c7085fcd1280359f4530cc1209aad037))
+- Bump fast-uri to 3.1.4 to clear the CI audit gate [TRA-279] ([5a593c3](../../commit/5a593c39746a4fd99a5235d3146dd47db741f010))
+- Remove unused PostCompact hook from settings ([e0af7b2](../../commit/e0af7b24d7ce28942c7c79dfb2d9545057cd9f9f))
+- Merge branch 'main' of github.com:nacorga/tracelog-lib into develop ([489172e](../../commit/489172e4355beba0181a967f1430acbcb256e4d5))
+- Merge pull request #125 from nacorga/feature/TRA-115-shopify-pixel-snippet-entry ([566354a](../../commit/566354a7734bf8c0dd502d4216de7531da55664e))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.3.2...v3.4.0
+
+
 ## [3.3.2] - 2026-07-08
 
 ### ✨ Features
