@@ -787,7 +787,7 @@ describe('PerformanceHandler - Navigation ID & Consolidation', () => {
       observe(options?: { type?: string }): void {
         if (options?.type) {
           triggers.set(options.type, (entries: unknown[]) => {
-            this.cb({ getEntries: () => entries } as unknown as PerformanceObserverEntryList, this as any);
+            this.cb({ getEntries: () => entries } as unknown as PerformanceObserverEntryList, this);
           });
         }
       }

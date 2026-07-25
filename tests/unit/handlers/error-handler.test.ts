@@ -789,7 +789,7 @@ describe('ErrorHandler - Per-Pageview Signature Throttle', () => {
         type: EventType.SESSION_START,
         page_url: 'https://example.com',
         timestamp: Date.now(),
-      } as never);
+      });
 
       localTrackSpy.mockClear();
       window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 55555', filename: 'app.js', lineno: 1 }));
@@ -834,7 +834,7 @@ describe('ErrorHandler - Per-Pageview Signature Throttle', () => {
         type: EventType.PAGE_VIEW,
         page_url: 'https://example.com/route-2',
         timestamp: Date.now(),
-      } as never);
+      });
 
       localTrackSpy.mockClear();
       window.dispatchEvent(new ErrorEvent('error', { message: 'Boom 55555', filename: 'app.js', lineno: 1 }));

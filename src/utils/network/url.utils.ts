@@ -77,7 +77,9 @@ const generateFirstPartyApiUrl = (projectId: string): string => {
 
     return collectApiUrl;
   } catch (error) {
-    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
   }
 };
 

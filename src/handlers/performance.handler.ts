@@ -210,7 +210,7 @@ export class PerformanceHandler extends StateManager {
       'largest-contentful-paint',
       (list) => {
         const entries = list.getEntries();
-        const last = entries[entries.length - 1] as (PerformanceEntry & { startTime: number }) | undefined;
+        const last = entries[entries.length - 1];
 
         if (!last) {
           return;
@@ -307,7 +307,7 @@ export class PerformanceHandler extends StateManager {
 
   private reportTTFB(): void {
     try {
-      const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      const nav = performance.getEntriesByType('navigation')[0];
 
       if (!nav) {
         return;
@@ -438,7 +438,7 @@ export class PerformanceHandler extends StateManager {
    */
   private getNavigationId(): string | null {
     try {
-      const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+      const nav = performance.getEntriesByType('navigation')[0];
 
       if (!nav) {
         return null;

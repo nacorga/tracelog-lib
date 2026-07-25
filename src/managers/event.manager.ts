@@ -340,7 +340,7 @@ export class EventManager extends StateManager {
       return;
     }
 
-    const eventType = type as EventType;
+    const eventType = type;
 
     if (!isCriticalEvent) {
       if (this.sessionEventCounts.total >= MAX_EVENTS_PER_SESSION) {
@@ -1250,7 +1250,7 @@ export class EventManager extends StateManager {
   private stableStringify(value: unknown): string {
     return JSON.stringify(value, (_, v: unknown) => {
       if (v && typeof v === 'object' && !Array.isArray(v)) {
-        return Object.keys(v as Record<string, unknown>)
+        return Object.keys(v)
           .sort()
           .reduce<Record<string, unknown>>((sorted, key) => {
             sorted[key] = (v as Record<string, unknown>)[key];
@@ -1379,7 +1379,7 @@ export class EventManager extends StateManager {
       // public listeners. The wrapper EventsQueue carries session_id separately.
       const { _session_id, ...publicEvent } = eventData as QueuedEvent;
       void _session_id;
-      this.emitter.emit(EmitterEvent.EVENT, publicEvent as EventData);
+      this.emitter.emit(EmitterEvent.EVENT, publicEvent);
     }
   }
 

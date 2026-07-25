@@ -33,9 +33,8 @@ vite.config.mjs
 vitest.config.mjs
 vitest.integration.config.mjs
 playwright.config.ts
-eslintrc.*
+eslint.config.mjs
 .prettierrc
-.eslintrc.cjs
 
 # Documentation (keep LICENSE and README)
 CLAUDE.md

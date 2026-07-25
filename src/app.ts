@@ -99,7 +99,7 @@ export class App extends StateManager {
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
+      throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`, { cause: error });
     }
   }
 

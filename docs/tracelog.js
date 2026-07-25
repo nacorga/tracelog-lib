@@ -568,7 +568,9 @@ const generateFirstPartyApiUrl = (projectId) => {
     }
     return collectApiUrl;
   } catch (error) {
-    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid SaaS URL configuration: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error
+    });
   }
 };
 const getCollectApiUrls = (config) => {
@@ -790,7 +792,7 @@ const sanitizeMetadata = (metadata) => {
     return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`);
+    throw new Error(`[TraceLog] Metadata sanitization failed: ${errorMessage}`, { cause: error });
   }
 };
 const PII_PATTERNS = [
@@ -1707,8 +1709,6 @@ class SenderManager extends StateManager {
         if (error instanceof RateLimitError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
-          allTimeouts = false;
-          hadHttpResponse = true;
           this.armRateLimitCooldown(Date.now() + RATE_LIMIT_COOLDOWN_MS);
           log("warn", "Rate limited, skipping retries", {
             data: { events: body.events.length, attempt, cooldownMs: RATE_LIMIT_COOLDOWN_MS }
@@ -1935,7 +1935,7 @@ class SenderManager extends StateManager {
   persistEventsWithFailureCount(body, recoveryFailures, skipThrottle = false) {
     try {
       const existing = this.getPersistedData();
-      if (!skipThrottle && existing && existing.timestamp) {
+      if (!skipThrottle && typeof existing?.timestamp === "number") {
         const timeSinceExisting = Date.now() - existing.timestamp;
         if (timeSinceExisting < PERSISTENCE_THROTTLE_MS) {
           log("debug", "Skipping persistence, another tab recently persisted events", {
@@ -1971,7 +1971,7 @@ class SenderManager extends StateManager {
   logPermanentError(context, error) {
     const now = Date.now();
     const key = `${error.statusCode ?? "unknown"}:${error.responseCode ?? ""}`;
-    const shouldLog = !this.lastPermanentErrorLog || this.lastPermanentErrorLog.key !== key || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
+    const shouldLog = this.lastPermanentErrorLog?.key !== key || now - this.lastPermanentErrorLog.timestamp >= PERMANENT_ERROR_LOG_THROTTLE_MS;
     if (shouldLog) {
       log("error", context, {
         data: { status: error.statusCode, code: error.responseCode, message: error.message }
@@ -4378,7 +4378,7 @@ class ClickHandler extends StateManager {
     if (!clickedText && !relevantText) {
       return "";
     }
-    let finalText = "";
+    let finalText;
     if (clickedText && clickedText.length <= MAX_TEXT_LENGTH) {
       finalText = clickedText;
     } else if (relevantText.length <= MAX_TEXT_LENGTH) {
@@ -5575,7 +5575,7 @@ class App extends StateManager {
     } catch (error) {
       this.destroy(true);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`);
+      throw new Error(`[TraceLog] TraceLog initialization failed: ${errorMessage}`, { cause: error });
     }
   }
   /**
