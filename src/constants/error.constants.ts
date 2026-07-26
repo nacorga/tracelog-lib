@@ -121,9 +121,10 @@ export const MAX_PAGEVIEW_SIGNATURE_KEYS = 200;
 export const PERMANENT_ERROR_LOG_THROTTLE_MS = 60_000; // 1 minute
 
 /**
- * Maximum length of the application `code` field accepted from a 4xx response body.
- * Application codes are short identifiers (e.g. `PLAN_LIMIT_EXCEEDED`); anything
- * longer is treated as untrusted noise and ignored to avoid log pollution.
+ * Maximum length of the application code read from a 4xx ingest response — the `error` field of the
+ * ingest error envelope. Application codes are short identifiers (e.g. `PLAN_LIMIT_EXCEEDED`,
+ * `UNKNOWN_PROJECT`); anything longer is treated as untrusted noise and ignored to avoid log
+ * pollution.
  */
 export const MAX_RESPONSE_CODE_LENGTH = 64;
 

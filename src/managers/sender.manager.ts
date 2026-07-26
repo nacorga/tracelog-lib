@@ -57,6 +57,11 @@ type HealthBeaconReason = 'events_blocked' | 'unknown_project';
  */
 const UNKNOWN_PROJECT_ERROR_CODE = 'UNKNOWN_PROJECT';
 
+/** Guards against treating an oversized or empty `error` field as a machine-readable code. */
+function isUsableErrorCode(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_RESPONSE_CODE_LENGTH;
+}
+
 /**
  * Manages sending event queues to the TraceLog SaaS endpoint with persistence,
  * recovery, retry, circuit breaker, and 429 cooldown.
@@ -657,34 +662,29 @@ export class SenderManager extends StateManager {
 
   /**
    * Extracts the application error code from a 4xx body, and with it the proof that a TraceLog
-   * host — not an arbitrary server on the same name — produced the response.
+   * host — not an arbitrary server answering the same name — produced the response.
    *
-   * Two shapes are accepted, in order:
-   *  1. `{ code }` — a bare application code.
-   *  2. `{ statusCode, error }` — the ingest error envelope every rejection actually arrives in.
-   *     `error` is trusted only when `statusCode` echoes the HTTP status: that pairing is the
-   *     envelope's signature, and a generic `{"error":"Not Found"}` from a foreign host lacks it.
+   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path }`,
+   * the single shape every rejection arrives in (tracelog-middleware's `AllExceptionsFilter`, which
+   * renders an exception's own `code` into `error`). `error` counts only when `statusCode` echoes
+   * the HTTP status — that pairing is the envelope's signature, and neither a generic
+   * `{"error":"Not Found"}` nor a bare `{"code":"..."}` from a foreign host can produce it.
    *
-   * Returning `undefined` therefore means "nothing here identifies the responder as TraceLog",
-   * which is what {@link HealthBeaconReason} `unknown_project` gates on.
+   * An uncorroborated code is deliberately NOT read: a code is both a log detail and the authorship
+   * proof {@link HealthBeaconReason} `unknown_project` gates on, so accepting one nobody vouched for
+   * would let any responder authorize a claim about TraceLog's own records. `undefined` therefore
+   * means exactly "nothing here identifies the responder as TraceLog".
    */
   private async readTraceLogErrorCode(response: Response): Promise<string | undefined> {
     try {
-      const body = (await response.clone().json()) as { code?: unknown; statusCode?: unknown; error?: unknown };
-      if (this.isUsableErrorCode(body.code)) {
-        return body.code;
-      }
-      if (body.statusCode === response.status && this.isUsableErrorCode(body.error)) {
+      const body = (await response.clone().json()) as { statusCode?: unknown; error?: unknown };
+      if (body.statusCode === response.status && isUsableErrorCode(body.error)) {
         return body.error;
       }
     } catch {
       // Best-effort only. Status still determines permanence.
     }
     return undefined;
-  }
-
-  private isUsableErrorCode(value: unknown): value is string {
-    return typeof value === 'string' && value.length > 0 && value.length <= MAX_RESPONSE_CODE_LENGTH;
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
