@@ -44,6 +44,22 @@ function jsonResponse(status: number, body: unknown = {}): MockResponse {
   return resp;
 }
 
+/**
+ * An ingest rejection in the shape production actually returns: tracelog-middleware's
+ * `AllExceptionsFilter` envelope, whose machine-readable code rides on `error` (there is no `code`
+ * field) and is corroborated by `statusCode`. Tests use this rather than a hand-rolled body so the
+ * parser and the beacon gates stay pinned to the real wire contract.
+ */
+function ingestErrorResponse(status: number, error: string): MockResponse {
+  return jsonResponse(status, {
+    statusCode: status,
+    error,
+    message: `Ingest rejected with ${status}`,
+    timestamp: '2026-07-26T00:00:00.000Z',
+    path: '/p/proj-123/collect',
+  });
+}
+
 function emptyResponse(status: number): MockResponse {
   const resp: MockResponse = {
     ok: status >= 200 && status < 300,
@@ -175,7 +191,7 @@ describe('SenderManager - async send via fetch()', () => {
   }, 10_000);
 
   it('does NOT retry on permanent 4xx and discards persisted events', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(400, { code: 'BAD_REQUEST' }));
+    const fetchMock = vi.fn().mockResolvedValue(ingestErrorResponse(400, 'BadRequestException'));
     (global as any).fetch = fetchMock;
 
     const { sender, storage } = makeSender();
@@ -439,7 +455,7 @@ describe('SenderManager - persistence recovery', () => {
   });
 
   it('clears persisted events on permanent error during recovery', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const fetchMock = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     (global as any).fetch = fetchMock;
 
     const persisted = {
@@ -766,28 +782,64 @@ describe('SenderManager - health beacon', () => {
     return { sender, beacon };
   }
 
-  it('emits an events_blocked beacon to the /client-error sibling path on a 403', async () => {
-    // Force the fetch fallback (delete sendBeacon) so the payload is a readable string.
+  /**
+   * A sender whose beacons go out over `fetch` instead of `sendBeacon` (deleting `sendBeacon` forces
+   * the fallback), so the payload is a readable string the assertions can parse.
+   */
+  function makeFetchBeaconSender(respond: (url: string) => MockResponse): {
+    sender: SenderManager;
+    beaconPayloads: () => { url: string; body: any }[];
+  } {
     delete (navigator as any).sendBeacon;
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const fetchMock = vi.fn(async (url: unknown, options?: RequestInit) => {
+      await Promise.resolve();
+      void options;
+      return respond(String(url));
+    });
     (global as any).fetch = fetchMock;
     const { sender } = makeSender();
     sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
 
+    const beaconPayloads = () =>
+      fetchMock.mock.calls
+        .filter((call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'))
+        .map((call) => ({
+          url: call[0] as string,
+          body: JSON.parse((call[1] as RequestInit).body as string),
+        }));
+
+    return { sender, beaconPayloads };
+  }
+
+  it('emits an events_blocked beacon to the /client-error sibling path on a 403', async () => {
+    const { sender, beaconPayloads } = makeFetchBeaconSender(() => ingestErrorResponse(403, 'ForbiddenException'));
+
     await sender.sendEventsQueue(makeQueue());
 
-    const beaconCall = fetchMock.mock.calls.find(
-      (call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'),
-    );
-    expect(beaconCall).toBeDefined();
-    expect(beaconCall![0]).toBe('https://api.tracelog.io/p/proj-123/client-error');
-    const body = JSON.parse((beaconCall![1] as RequestInit).body as string);
-    expect(body.projectId).toBe(PROJECT_ID);
-    expect(body.reason).toBe('events_blocked');
+    expect(beaconPayloads()).toEqual([
+      {
+        url: 'https://api.tracelog.io/p/proj-123/client-error',
+        body: expect.objectContaining({ projectId: PROJECT_ID, reason: 'events_blocked' }),
+      },
+    ]);
+  });
+
+  /**
+   * A 403 needs no proof of authorship: a WAF or CDN in front of ingest returning one IS the outage
+   * the merchant needs told about, whoever answered. Only `unknown_project` — a claim about
+   * TraceLog's own records — demands the UNKNOWN_PROJECT code.
+   */
+  it('emits events_blocked on a 403 even from a responder that is not TraceLog', async () => {
+    const { sender, beaconPayloads } = makeFetchBeaconSender(() => jsonResponse(403, { blocked: 'by-waf' }));
+
+    await sender.sendEventsQueue(makeQueue());
+
+    const [emitted] = beaconPayloads();
+    expect(emitted?.body.reason).toBe('events_blocked');
   });
 
   it('throttles repeated 403s to a single beacon within the throttle window', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const { sender, beacon } = makeSaasSender();
 
     await sender.sendEventsQueue(makeQueue());
@@ -796,8 +848,107 @@ describe('SenderManager - health beacon', () => {
     expect(beacon).toHaveBeenCalledTimes(1);
   });
 
+  it('emits an unknown_project beacon on a 404 carrying the UNKNOWN_PROJECT code', async () => {
+    const { sender, beaconPayloads } = makeFetchBeaconSender(() => ingestErrorResponse(404, 'UNKNOWN_PROJECT'));
+
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beaconPayloads()).toEqual([
+      {
+        url: 'https://api.tracelog.io/p/proj-123/client-error',
+        body: expect.objectContaining({ projectId: PROJECT_ID, reason: 'unknown_project' }),
+      },
+    ]);
+  });
+
+  /**
+   * In accuracy mode the collect URL is the merchant's own CNAME'd subdomain. A parked page, a
+   * default CDN backend, or a captive portal answering 404 there must never be reported as a bad
+   * project id — "your project ID is unknown" is a claim only TraceLog's own 404 can support.
+   */
+  it.each([
+    ['a bare 404 with no parseable body', () => emptyResponse(404)],
+    ['a foreign JSON 404 with no envelope', () => jsonResponse(404, { error: 'Not Found' })],
+    // An uncorroborated code proves nothing: any responder can echo TraceLog's vocabulary, so the
+    // code counts only inside the envelope that vouches for it.
+    [
+      'a foreign 404 quoting the code with no corroborating statusCode',
+      () => jsonResponse(404, { code: 'UNKNOWN_PROJECT' }),
+    ],
+    [
+      'a foreign 404 quoting the code on the wrong field',
+      () => jsonResponse(404, { code: 'UNKNOWN_PROJECT', statusCode: 404 }),
+    ],
+    [
+      'an envelope whose statusCode contradicts the HTTP status',
+      () => jsonResponse(404, { statusCode: 500, error: 'UNKNOWN_PROJECT' }),
+    ],
+    ['an upstream 404 the middleware only relayed', () => ingestErrorResponse(404, 'HttpException')],
+  ])('stays silent on %s', async (_label, respond) => {
+    const { sender, beaconPayloads } = makeFetchBeaconSender(respond);
+
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beaconPayloads()).toEqual([]);
+  });
+
+  it('does not consume the throttle window on a 404 it stayed silent for', async () => {
+    let calls = 0;
+    const { sender, beaconPayloads } = makeFetchBeaconSender((url) => {
+      if (url.endsWith('/client-error')) return jsonResponse(204);
+      calls += 1;
+      // A parked-page 404 first, then the real thing: the beacon must still be free to fire.
+      return calls === 1 ? emptyResponse(404) : ingestErrorResponse(404, 'UNKNOWN_PROJECT');
+    });
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beaconPayloads().map((call) => call.body.reason)).toEqual(['unknown_project']);
+  });
+
+  it('throttles repeated 404s to a single beacon within the throttle window', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(404, 'UNKNOWN_PROJECT'));
+    const { sender, beacon } = makeSaasSender();
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('throttles 403 and 404 beacons independently for the same project (per-reason throttle key)', async () => {
+    let collectCalls = 0;
+    const { sender, beaconPayloads } = makeFetchBeaconSender((url) => {
+      if (url.endsWith('/client-error')) return jsonResponse(204);
+      collectCalls += 1;
+      return collectCalls === 1
+        ? ingestErrorResponse(403, 'ForbiddenException')
+        : ingestErrorResponse(404, 'UNKNOWN_PROJECT');
+    });
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    // Both fire: 'events_blocked' and 'unknown_project' are throttled independently, not shared.
+    expect(
+      beaconPayloads()
+        .map((call) => call.body.reason)
+        .sort(),
+    ).toEqual(['events_blocked', 'unknown_project']);
+  });
+
+  it('forwards the parsed error code in lastError so the backend can tell rejections apart', async () => {
+    const { sender, beaconPayloads } = makeFetchBeaconSender(() => ingestErrorResponse(404, 'UNKNOWN_PROJECT'));
+
+    await sender.sendEventsQueue(makeQueue());
+
+    const [emitted] = beaconPayloads();
+    expect(emitted?.body.lastError).toContain('UNKNOWN_PROJECT');
+  });
+
   it('persists the throttle across SenderManager instances (MPA navigation)', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const first = makeSaasSender();
     await first.sender.sendEventsQueue(makeQueue());
     expect(first.beacon).toHaveBeenCalledTimes(1);
@@ -810,7 +961,7 @@ describe('SenderManager - health beacon', () => {
   });
 
   it('scopes the throttle per project — a different projectId emits its own beacon', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const first = makeSaasSender();
     await first.sender.sendEventsQueue(makeQueue());
     expect(first.beacon).toHaveBeenCalledTimes(1);
@@ -823,7 +974,7 @@ describe('SenderManager - health beacon', () => {
   });
 
   it('emits again once the persisted throttle window has elapsed', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const first = makeSaasSender();
     await first.sender.sendEventsQueue(makeQueue());
 
@@ -839,7 +990,7 @@ describe('SenderManager - health beacon', () => {
   });
 
   it('falls back to fetch when sendBeacon rejects the beacon payload', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    const fetchMock = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     (global as any).fetch = fetchMock;
     (navigator as any).sendBeacon = vi.fn(() => false);
     const { sender } = makeSender();
@@ -867,7 +1018,7 @@ describe('SenderManager - health beacon', () => {
   });
 
   it('does not emit a beacon when healthBeacon is disabled', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const beacon = vi.fn(() => true);
     (navigator as any).sendBeacon = beacon;
     const { sender } = makeSender();
@@ -878,8 +1029,8 @@ describe('SenderManager - health beacon', () => {
     expect(beacon).not.toHaveBeenCalled();
   });
 
-  it('does not emit a beacon for a non-403 permanent error', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(400, { code: 'BAD_REQUEST' }));
+  it('does not emit a beacon for a permanent error that is neither 403 nor 404', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(400, 'BadRequestException'));
     const { sender, beacon } = makeSaasSender();
 
     await sender.sendEventsQueue(makeQueue());
@@ -888,7 +1039,7 @@ describe('SenderManager - health beacon', () => {
   });
 
   it('does not emit a beacon in standalone mode (no projectId configured)', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
+    (global as any).fetch = vi.fn().mockResolvedValue(ingestErrorResponse(403, 'ForbiddenException'));
     const beacon = vi.fn(() => true);
     (navigator as any).sendBeacon = beacon;
     const { sender } = makeSender();

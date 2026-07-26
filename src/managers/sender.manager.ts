@@ -38,13 +38,29 @@ interface SendCallbacks {
 }
 
 /**
- * Client-emitted diagnostic beacon reasons. Only `events_blocked` (403 at the
- * domain gate) is browser-detectable; `ingest_unreachable` (NXDOMAIN) is
- * detected server-side via DNS and intentionally NOT emitted from here.
- * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset
- * in lockstep when adding reasons.
+ * Client-emitted diagnostic beacon reasons. `events_blocked` (403 at the domain gate) and
+ * `unknown_project` (404 — the identifier the snippet carries doesn't resolve to a project)
+ * are both browser-detectable; `ingest_unreachable` (NXDOMAIN) is detected server-side via DNS
+ * and intentionally NOT emitted from here.
+ * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset in lockstep when
+ * adding reasons.
  */
-type HealthBeaconReason = 'events_blocked';
+type HealthBeaconReason = 'events_blocked' | 'unknown_project';
+
+/**
+ * The ingest error code that authorizes an `unknown_project` beacon.
+ *
+ * Emitted by tracelog-middleware for every flavour of unresolvable identifier (fresh miss, cached
+ * miss, and query joiner alike) and by nothing else — an upstream 404 the middleware merely relays
+ * carries a different code, so "project is being deleted" can never be reported as "your project id
+ * is unknown". A response without this code is not one TraceLog authored.
+ */
+const UNKNOWN_PROJECT_ERROR_CODE = 'UNKNOWN_PROJECT';
+
+/** Guards against treating an oversized or empty `error` field as a machine-readable code. */
+function isUsableErrorCode(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_RESPONSE_CODE_LENGTH;
+}
 
 /**
  * Manages sending event queues to the TraceLog SaaS endpoint with persistence,
@@ -500,12 +516,22 @@ export class SenderManager extends StateManager {
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
-          // A 403 means the snippet reached TraceLog but the domain gate rejected it — the backend
-          // will never see these events, so the browser is the only place that can report it. Emit a
-          // diagnostic beacon to the gate-bypassing endpoint. Only 403 (host reachable) qualifies: an
-          // NXDOMAIN/network failure can't reach any TraceLog host anyway and is server-detected via DNS.
+          // A 403 means something rejected the batch at the gate; a 404 means the project identifier
+          // itself doesn't resolve (typo, stale/regenerated id). Both leave the backend blind — the
+          // browser is the only place that can report either. Emit a diagnostic beacon to the
+          // gate-bypassing endpoint. An NXDOMAIN/network failure can't reach any host anyway and is
+          // server-detected via DNS, so it stays out of this branch.
+          //
+          // The two are gated differently on purpose. "Your events are being blocked" is true no
+          // matter who answered — a WAF or CDN in front of ingest returning 403 is exactly the
+          // outage the merchant needs told about — so 403 needs no proof of authorship. "Your
+          // project id is unknown" is a claim only TraceLog can make: in accuracy mode the collect
+          // URL is the merchant's own CNAME'd subdomain, and a parked page, a default CDN backend,
+          // or a captive portal answering 404 there must never be reported as a bad project id.
           if (error.statusCode === 403) {
             this.emitHealthBeacon('events_blocked', error.message);
+          } else if (error.statusCode === 404 && error.responseCode === UNKNOWN_PROJECT_ERROR_CODE) {
+            this.emitHealthBeacon('unknown_project', error.message);
           }
           throw error;
         }
@@ -634,11 +660,26 @@ export class SenderManager extends StateManager {
     }
   }
 
+  /**
+   * Extracts the application error code from a 4xx body, and with it the proof that a TraceLog
+   * host — not an arbitrary server answering the same name — produced the response.
+   *
+   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path }`,
+   * the single shape every rejection arrives in (tracelog-middleware's `AllExceptionsFilter`, which
+   * renders an exception's own `code` into `error`). `error` counts only when `statusCode` echoes
+   * the HTTP status — that pairing is the envelope's signature, and neither a generic
+   * `{"error":"Not Found"}` nor a bare `{"code":"..."}` from a foreign host can produce it.
+   *
+   * An uncorroborated code is deliberately NOT read: a code is both a log detail and the authorship
+   * proof {@link HealthBeaconReason} `unknown_project` gates on, so accepting one nobody vouched for
+   * would let any responder authorize a claim about TraceLog's own records. `undefined` therefore
+   * means exactly "nothing here identifies the responder as TraceLog".
+   */
   private async readTraceLogErrorCode(response: Response): Promise<string | undefined> {
     try {
-      const body = (await response.clone().json()) as { code?: unknown };
-      if (typeof body.code === 'string' && body.code.length > 0 && body.code.length <= MAX_RESPONSE_CODE_LENGTH) {
-        return body.code;
+      const body = (await response.clone().json()) as { statusCode?: unknown; error?: unknown };
+      if (body.statusCode === response.status && isUsableErrorCode(body.error)) {
+        return body.error;
       }
     } catch {
       // Best-effort only. Status still determines permanence.
