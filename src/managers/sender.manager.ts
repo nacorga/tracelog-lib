@@ -38,13 +38,17 @@ interface SendCallbacks {
 }
 
 /**
- * Client-emitted diagnostic beacon reasons. Only `events_blocked` (403 at the
- * domain gate) is browser-detectable; `ingest_unreachable` (NXDOMAIN) is
- * detected server-side via DNS and intentionally NOT emitted from here.
- * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset
- * in lockstep when adding reasons.
+ * Client-emitted diagnostic beacon reasons. `events_blocked` (403 at the domain gate) and
+ * `unknown_project` (404 — the identifier the snippet carries doesn't resolve to a project)
+ * are both browser-detectable; `ingest_unreachable` (NXDOMAIN) is detected server-side via DNS
+ * and intentionally NOT emitted from here.
+ * Mirror of `PROJECT_CLIENT_ERROR_REASONS` in tracelog-api — keep the subset in lockstep when
+ * adding reasons. `unknown_project` is NOT YET in that whitelist (nor in tracelog-middleware's
+ * `CLIENT_ERROR_BEACON_REASONS` mirror): until both add it, the middleware's `@IsIn` validation
+ * 400s this beacon before it reaches the API, and the failure is swallowed by the fire-and-forget
+ * transport (see `postBeacon`) — so this reason is inert until that companion change ships.
  */
-type HealthBeaconReason = 'events_blocked';
+type HealthBeaconReason = 'events_blocked' | 'unknown_project';
 
 /**
  * Manages sending event queues to the TraceLog SaaS endpoint with persistence,
@@ -500,12 +504,16 @@ export class SenderManager extends StateManager {
         if (error instanceof PermanentError) {
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
-          // A 403 means the snippet reached TraceLog but the domain gate rejected it — the backend
-          // will never see these events, so the browser is the only place that can report it. Emit a
-          // diagnostic beacon to the gate-bypassing endpoint. Only 403 (host reachable) qualifies: an
-          // NXDOMAIN/network failure can't reach any TraceLog host anyway and is server-detected via DNS.
+          // A 403 means the snippet reached TraceLog but the domain gate rejected it; a 404 means
+          // the project identifier itself doesn't resolve (typo, stale/regenerated id). Both leave
+          // the backend blind — the browser is the only place that can report either. Emit a
+          // diagnostic beacon to the gate-bypassing endpoint. An NXDOMAIN/network failure can't
+          // reach any TraceLog host anyway and is server-detected via DNS, so it stays out of this
+          // branch.
           if (error.statusCode === 403) {
             this.emitHealthBeacon('events_blocked', error.message);
+          } else if (error.statusCode === 404) {
+            this.emitHealthBeacon('unknown_project', error.message);
           }
           throw error;
         }

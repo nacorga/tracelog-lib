@@ -190,7 +190,7 @@ await tracelog.init({
     tracelog: {
       projectId: 'your-project-id',
       shopify: false,               // Optional: enable Shopify cart attribute linking
-      healthBeacon: true            // Optional (default true): diagnostic beacon when ingest is blocked (403)
+      healthBeacon: true            // Optional (default true): diagnostic beacon when ingest is blocked (403) or the project id is unknown (404)
     }
   }
 });

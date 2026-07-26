@@ -796,6 +796,64 @@ describe('SenderManager - health beacon', () => {
     expect(beacon).toHaveBeenCalledTimes(1);
   });
 
+  it('emits an unknown_project beacon to the /client-error sibling path on a 404', async () => {
+    // Force the fetch fallback (delete sendBeacon) so the payload is a readable string.
+    delete (navigator as any).sendBeacon;
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(404, { code: 'NOT_FOUND' }));
+    (global as any).fetch = fetchMock;
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+
+    await sender.sendEventsQueue(makeQueue());
+
+    const beaconCall = fetchMock.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'),
+    );
+    expect(beaconCall).toBeDefined();
+    expect(beaconCall![0]).toBe('https://api.tracelog.io/p/proj-123/client-error');
+    const body = JSON.parse((beaconCall![1] as RequestInit).body as string);
+    expect(body.projectId).toBe(PROJECT_ID);
+    expect(body.reason).toBe('unknown_project');
+  });
+
+  it('throttles repeated 404s to a single beacon within the throttle window', async () => {
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(404, { code: 'NOT_FOUND' }));
+    const { sender, beacon } = makeSaasSender();
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    expect(beacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('throttles 403 and 404 beacons independently for the same project (per-reason throttle key)', async () => {
+    // Force the fetch fallback (delete sendBeacon) so beacon payloads are readable strings.
+    delete (navigator as any).sendBeacon;
+    let collectCalls = 0;
+    const fetchMock = vi.fn(async (url: unknown, _options?: RequestInit) => {
+      await Promise.resolve();
+      if (typeof url === 'string' && url.endsWith('/client-error')) {
+        return jsonResponse(204);
+      }
+      collectCalls += 1;
+      return collectCalls === 1 ? jsonResponse(403, { code: 'FORBIDDEN' }) : jsonResponse(404, { code: 'NOT_FOUND' });
+    });
+    (global as any).fetch = fetchMock;
+    const { sender } = makeSender();
+    sender['set']('config', { integrations: { tracelog: { projectId: PROJECT_ID } } });
+
+    await sender.sendEventsQueue(makeQueue());
+    await sender.sendEventsQueue(makeQueue());
+
+    const beaconCalls = fetchMock.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].endsWith('/client-error'),
+    );
+    const reasons = beaconCalls.map((call) => JSON.parse((call[1] as RequestInit).body as string).reason);
+
+    // Both fire: 'events_blocked' and 'unknown_project' are throttled independently, not shared.
+    expect(reasons.sort()).toEqual(['events_blocked', 'unknown_project']);
+  });
+
   it('persists the throttle across SenderManager instances (MPA navigation)', async () => {
     (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(403, { code: 'FORBIDDEN' }));
     const first = makeSaasSender();
@@ -878,7 +936,7 @@ describe('SenderManager - health beacon', () => {
     expect(beacon).not.toHaveBeenCalled();
   });
 
-  it('does not emit a beacon for a non-403 permanent error', async () => {
+  it('does not emit a beacon for a permanent error that is neither 403 nor 404', async () => {
     (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(400, { code: 'BAD_REQUEST' }));
     const { sender, beacon } = makeSaasSender();
 
