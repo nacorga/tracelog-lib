@@ -30,6 +30,30 @@
 
 
 
+
+## [3.4.1] - 2026-07-26
+
+### ✨ Features
+
+- Enhance error handling for ingest rejections and update tests ([76c2d18](../../commit/76c2d18dee147387dc612f35698ec0927eddb5e3))
+- Enhance health beacon logic for 403 and 404 errors with detailed diagnostics ([9a971c4](../../commit/9a971c41721fbeb6bc21565aa4b92de07787be7b))
+- Emit a diagnostic beacon on unknown-project (404) ingest rejection [TRA-321] ([fa17dac](../../commit/fa17dacabb9892526d270babcf2846a7cade79b7))
+
+### 🔧 Other Changes
+
+- Merge pull request #130 from nacorga/release/20260726.1 ([8093eba](../../commit/8093eba32b6ee19f29293123c35214a7b5a50280))
+- Merge pull request #129 from nacorga/feature/TRA-321-phase2-unknown-project-beacon ([c115a93](../../commit/c115a93001e1dca96431591384bfe655beea941a))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.4.0...v3.4.1
+
+
 ## [3.4.0] - 2026-07-25
 
 ### ✨ Features
