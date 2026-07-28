@@ -270,7 +270,7 @@ const Ft = () => {
     default:
       return ze;
   }
-}, Zt = 50, es = "3.4.0", ts = es, ss = () => typeof window < "u" && typeof sessionStorage < "u", ns = () => {
+}, Zt = 50, es = "3.4.1", ts = es, ss = () => typeof window < "u" && typeof sessionStorage < "u", ns = () => {
   try {
     const n = new URLSearchParams(window.location.search);
     n.delete(nt);
