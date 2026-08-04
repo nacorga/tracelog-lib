@@ -157,6 +157,26 @@ describe('SenderManager - async send via fetch()', () => {
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
+  it('exposes a validated partial receipt without retrying or persisting the delivered batch', async () => {
+    const receipt = {
+      outcome: 'partial',
+      accepted: 1,
+      duplicates: 0,
+      dropped: 1,
+      coverage: 'partial',
+    } as const;
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(201, receipt));
+
+    const { sender, storage } = makeSender();
+    const onSuccess = vi.fn();
+
+    await expect(sender.sendEventsQueue(makeQueue(), { onSuccess })).resolves.toBe(true);
+
+    expect(onSuccess.mock.calls[0]?.[3]).toEqual(receipt);
+    expect(sender.getLastIngestionReceipt()).toEqual(receipt);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
   it('attaches idempotency_token, client_version and referer to the request payload', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200));
     (global as any).fetch = fetchMock;
@@ -204,6 +224,36 @@ describe('SenderManager - async send via fetch()', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(onFailure).toHaveBeenCalledTimes(1);
     // Permanent errors clear pre-existing persistence to break retry loops.
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('surfaces a 402 rejection receipt while discarding the permanently refused batch', async () => {
+    const receipt = {
+      outcome: 'rejected',
+      accepted: 0,
+      duplicates: 0,
+      dropped: 2,
+      reason: 'session_band',
+      retryAt: '2026-09-01T00:00:00.000Z',
+      coverage: 'partial',
+    } as const;
+    const response = ingestErrorResponse(402, 'SESSION_BAND_PAUSED');
+    response.json = async (): Promise<unknown> =>
+      await Promise.resolve({
+        statusCode: 402,
+        error: 'SESSION_BAND_PAUSED',
+        message: 'Normal ingestion is paused for this accounting period.',
+        ...receipt,
+      });
+    (global as any).fetch = vi.fn().mockResolvedValue(response);
+
+    const { sender, storage } = makeSender();
+    const onFailure = vi.fn();
+
+    await expect(sender.sendEventsQueue(makeQueue(), { onFailure })).resolves.toBe(false);
+
+    expect(onFailure).toHaveBeenCalledWith(receipt);
+    expect(sender.getLastIngestionReceipt()).toEqual(receipt);
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 

@@ -27,14 +27,16 @@ import {
   PermanentError,
   RateLimitError,
   TimeoutError,
+  type IngestionReceipt,
+  parseIngestionReceipt,
 } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
-  onFailure?: () => void;
+  onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue, receipt?: IngestionReceipt) => void;
+  onFailure?: (receipt?: IngestionReceipt) => void;
 }
 
 /**
@@ -78,6 +80,7 @@ export class SenderManager extends StateManager {
   private readonly storeManager: StorageManager;
   private readonly apiUrl: string;
   private lastPermanentErrorLog: { key: string; timestamp: number } | null = null;
+  private lastIngestionReceipt: IngestionReceipt | null = null;
   /**
    * In-memory fallback for the beacon throttle when localStorage is
    * unavailable. The primary throttle state lives in localStorage (see
@@ -336,13 +339,19 @@ export class SenderManager extends StateManager {
    */
   async sendEventsQueue(body: EventsQueue, callbacks?: SendCallbacks): Promise<boolean> {
     const stableBody = this.ensureBatchMetadata(body);
+    this.lastIngestionReceipt = null;
 
     try {
       const success = await this.send(stableBody);
 
       if (success) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(stableBody.events.length, stableBody.events, stableBody);
+        callbacks?.onSuccess?.(
+          stableBody.events.length,
+          stableBody.events,
+          stableBody,
+          this.lastIngestionReceipt ?? undefined,
+        );
       } else {
         this.persistEvents(stableBody);
         callbacks?.onFailure?.();
@@ -351,9 +360,10 @@ export class SenderManager extends StateManager {
       return success;
     } catch (error) {
       if (error instanceof PermanentError) {
+        this.lastIngestionReceipt = error.ingestionReceipt ?? null;
         this.logPermanentError('Permanent error, not retrying', error);
         this.clearPersistedEvents();
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(this.lastIngestionReceipt ?? undefined);
         return false;
       }
 
@@ -375,6 +385,7 @@ export class SenderManager extends StateManager {
     }
 
     this.recoveryInProgress = true;
+    this.lastIngestionReceipt = null;
 
     let recoveryBody: EventsQueue | null = null;
     let recoveryFailures = 0;
@@ -417,16 +428,22 @@ export class SenderManager extends StateManager {
 
       if (success) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, recoveryBody);
+        callbacks?.onSuccess?.(
+          persistedData.events.length,
+          persistedData.events,
+          recoveryBody,
+          this.lastIngestionReceipt ?? undefined,
+        );
       } else {
         this.persistEventsWithFailureCount(recoveryBody, recoveryFailures + 1, true);
         callbacks?.onFailure?.();
       }
     } catch (error) {
       if (error instanceof PermanentError) {
+        this.lastIngestionReceipt = error.ingestionReceipt ?? null;
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(this.lastIngestionReceipt ?? undefined);
         return;
       }
 
@@ -445,6 +462,11 @@ export class SenderManager extends StateManager {
    * intentionally kept in localStorage for recovery.
    */
   stop(): void {}
+
+  /** Most recent validated receipt, or null for legacy/non-HTTP outcomes. */
+  getLastIngestionReceipt(): Readonly<IngestionReceipt> | null {
+    return this.lastIngestionReceipt;
+  }
 
   private async backoffDelay(attempt: number): Promise<void> {
     const exponentialDelay = RETRY_BACKOFF_BASE_MS * Math.pow(2, attempt);
@@ -498,6 +520,7 @@ export class SenderManager extends StateManager {
         const response = await this.sendWithTimeout(url, payload);
 
         if (response.ok) {
+          this.lastIngestionReceipt = await this.readIngestionReceipt(response);
           if (attempt > 1) {
             log('info', `Send succeeded after ${attempt - 1} retry attempt(s)`, {
               data: { events: requestBody.events.length, attempt },
@@ -631,11 +654,11 @@ export class SenderManager extends StateManager {
           response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
-          const responseCode = await this.readTraceLogErrorCode(response);
+          const { responseCode, receipt } = await this.readTraceLogResponseMetadata(response);
           const message = responseCode
             ? `HTTP ${response.status}: ${response.statusText} (${responseCode})`
             : `HTTP ${response.status}: ${response.statusText}`;
-          throw new PermanentError(message, response.status, responseCode);
+          throw new PermanentError(message, response.status, responseCode, receipt ?? undefined);
         }
 
         if (response.status === 429) {
@@ -664,7 +687,7 @@ export class SenderManager extends StateManager {
    * Extracts the application error code from a 4xx body, and with it the proof that a TraceLog
    * host — not an arbitrary server answering the same name — produced the response.
    *
-   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path }`,
+   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path, ...receipt }`,
    * the single shape every rejection arrives in (tracelog-middleware's `AllExceptionsFilter`, which
    * renders an exception's own `code` into `error`). `error` counts only when `statusCode` echoes
    * the HTTP status — that pairing is the envelope's signature, and neither a generic
@@ -675,16 +698,28 @@ export class SenderManager extends StateManager {
    * would let any responder authorize a claim about TraceLog's own records. `undefined` therefore
    * means exactly "nothing here identifies the responder as TraceLog".
    */
-  private async readTraceLogErrorCode(response: Response): Promise<string | undefined> {
+  private async readTraceLogResponseMetadata(
+    response: Response,
+  ): Promise<{ responseCode?: string; receipt: IngestionReceipt | null }> {
     try {
       const body = (await response.clone().json()) as { statusCode?: unknown; error?: unknown };
+      const receipt = parseIngestionReceipt(body);
       if (body.statusCode === response.status && isUsableErrorCode(body.error)) {
-        return body.error;
+        return { responseCode: body.error, receipt };
       }
+      return { receipt };
     } catch {
       // Best-effort only. Status still determines permanence.
     }
-    return undefined;
+    return { receipt: null };
+  }
+
+  private async readIngestionReceipt(response: Response): Promise<IngestionReceipt | null> {
+    try {
+      return parseIngestionReceipt(await response.clone().json());
+    } catch {
+      return null;
+    }
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {
