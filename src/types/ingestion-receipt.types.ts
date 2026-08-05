@@ -24,6 +24,22 @@ export function isIngestionRejectionReason(value: unknown): value is IngestionRe
 }
 
 /**
+ * Whether a body carries the ingest error envelope's signature — `statusCode` echoing the HTTP
+ * status — and with it the proof that a TraceLog host produced the response.
+ *
+ * tracelog-middleware's `AllExceptionsFilter` renders every rejection as
+ * `{ statusCode, error, message, timestamp, path, ...receipt }`, so on a non-2xx the receipt and
+ * the signature always arrive together. A generic `{"error":"Not Found"}` from a parked page, a
+ * captive portal, or a CDN backend answering the collect URL cannot produce the pairing.
+ *
+ * Shared by every sender on purpose: a receipt states how much of a merchant's traffic was
+ * dropped and why, so the rule for trusting one must not differ per transport.
+ */
+export function hasIngestEnvelopeSignature(value: unknown, httpStatus: number): boolean {
+  return typeof value === 'object' && value !== null && (value as Record<string, unknown>).statusCode === httpStatus;
+}
+
+/**
  * Parses the additive receipt while remaining compatible with legacy boolean/empty bodies.
  *
  * Structural strictness is the only thing standing between a receipt and the claims it makes

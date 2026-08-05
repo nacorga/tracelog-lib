@@ -14,7 +14,11 @@
  * Treat a `null` receipt as "no information", never as "nothing was ingested".
  */
 
-import { type IngestionReceipt, parseIngestionReceipt } from '../types/ingestion-receipt.types';
+import {
+  hasIngestEnvelopeSignature,
+  type IngestionReceipt,
+  parseIngestionReceipt,
+} from '../types/ingestion-receipt.types';
 
 const INGEST_HOST = 'https://ingest.tracelog.io';
 
@@ -56,7 +60,12 @@ export async function sendBatch(settings: PixelSenderSettings, body: PixelEventB
 
     if (typeof response.json !== 'function') return null;
     try {
-      return parseIngestionReceipt(await response.json());
+      const payload: unknown = await response.json();
+      // Same rule the standard sender applies: a receipt riding on a rejection is only read when
+      // the body proves a TraceLog host wrote it. On 2xx no signature exists, and none is needed —
+      // the status already established that the responder accepted the batch.
+      if (!response.ok && !hasIngestEnvelopeSignature(payload, response.status)) return null;
+      return parseIngestionReceipt(payload);
     } catch {
       return null;
     }

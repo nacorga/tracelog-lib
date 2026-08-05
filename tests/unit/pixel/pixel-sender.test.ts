@@ -102,6 +102,33 @@ describe('sendBatch', () => {
     await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
   });
 
+  it('reads a rejection receipt only when the body proves a TraceLog host wrote it', async () => {
+    const receiptFields = {
+      outcome: 'rejected',
+      accepted: 0,
+      duplicates: 0,
+      dropped: 2,
+      reason: 'session_band',
+      coverage: 'partial',
+    } as const;
+
+    // No `statusCode` echoing the HTTP status — a parked page or CDN backend could send this.
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: async () => await Promise.resolve(receiptFields),
+    });
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
+
+    // The middleware's real envelope carries the signature alongside the receipt.
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: async () => await Promise.resolve({ statusCode: 402, error: 'SESSION_BAND_PAUSED', ...receiptFields }),
+    });
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toEqual(receiptFields);
+  });
+
   it('returns null when the response body is not JSON', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,

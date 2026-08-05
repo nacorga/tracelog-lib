@@ -29,6 +29,7 @@ import {
   TimeoutError,
   type IngestionReceipt,
   parseIngestionReceipt,
+  hasIngestEnvelopeSignature,
 } from '../types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
@@ -704,7 +705,7 @@ export class SenderManager extends StateManager {
       // A receipt asserts more than a code does — `dropped`, and `account_closed`/`project_paused`
       // are statements about TraceLog's own account records — so the claim that needs the most
       // authorship proof must never be the one that skips it.
-      if (body.statusCode !== response.status) {
+      if (!hasIngestEnvelopeSignature(body, response.status)) {
         return { receipt: null };
       }
 
