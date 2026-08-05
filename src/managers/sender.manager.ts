@@ -702,7 +702,7 @@ export class SenderManager extends StateManager {
       const body = (await response.clone().json()) as { statusCode?: unknown; error?: unknown };
 
       // The envelope signature gates BOTH readings, and it is checked before either is taken.
-      // A receipt asserts more than a code does — `dropped`, and `account_closed`/`project_paused`
+      // A receipt asserts more than a code does — `dropped`, and `account_paused`/`project_paused`
       // are statements about TraceLog's own account records — so the claim that needs the most
       // authorship proof must never be the one that skips it.
       if (!hasIngestEnvelopeSignature(body, response.status)) {

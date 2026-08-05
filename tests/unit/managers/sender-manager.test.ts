@@ -162,6 +162,8 @@ describe('SenderManager - async send via fetch()', () => {
       outcome: 'partial',
       accepted: 1,
       duplicates: 0,
+      // Non-zero so the round-trip proves `filtered` survives parsing and reaches the caller.
+      filtered: 2,
       dropped: 1,
       coverage: 'partial',
     } as const;
@@ -231,6 +233,7 @@ describe('SenderManager - async send via fetch()', () => {
       outcome: 'rejected',
       accepted: 0,
       duplicates: 0,
+      filtered: 0,
       dropped: 2,
       reason: 'session_band',
       retryAt: '2026-09-01T00:00:00.000Z',
@@ -258,7 +261,7 @@ describe('SenderManager - async send via fetch()', () => {
   it('ignores a rejection receipt from a responder that does not prove it is TraceLog', async () => {
     // Same receipt fields, but the envelope signature is absent: no `statusCode` echoing the HTTP
     // status, no `error` code. A parked page, captive portal, or CDN backend answering the collect
-    // URL must not be able to tell the merchant their account is closed and their traffic dropped.
+    // URL must not be able to tell the merchant their account is paused and their traffic dropped.
     const response = ingestErrorResponse(403, 'FORBIDDEN');
     response.json = async (): Promise<unknown> =>
       await Promise.resolve({
@@ -266,7 +269,7 @@ describe('SenderManager - async send via fetch()', () => {
         accepted: 0,
         duplicates: 0,
         dropped: 99,
-        reason: 'account_closed',
+        reason: 'account_paused',
         coverage: 'partial',
       });
     (global as any).fetch = vi.fn().mockResolvedValue(response);
@@ -280,8 +283,22 @@ describe('SenderManager - async send via fetch()', () => {
   });
 
   it('delivers each send its own receipt when two sends complete out of order', async () => {
-    const first = { outcome: 'partial', accepted: 1, duplicates: 0, dropped: 1, coverage: 'partial' } as const;
-    const second = { outcome: 'accepted', accepted: 3, duplicates: 0, dropped: 0, coverage: 'complete' } as const;
+    const first = {
+      outcome: 'partial',
+      accepted: 1,
+      duplicates: 0,
+      filtered: 0,
+      dropped: 1,
+      coverage: 'partial',
+    } as const;
+    const second = {
+      outcome: 'accepted',
+      accepted: 3,
+      duplicates: 0,
+      filtered: 0,
+      dropped: 0,
+      coverage: 'complete',
+    } as const;
     let releaseFirst: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (releaseFirst = resolve));
     (global as any).fetch = vi

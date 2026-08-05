@@ -23,11 +23,43 @@ describe('parseIngestionReceipt', () => {
       outcome: 'rejected',
       accepted: 0,
       duplicates: 0,
+      // Absent upstream: this middleware predates `filtered`, or the API (which never filters
+      // intentionally) answered directly. Both mean zero.
+      filtered: 0,
       dropped: 4,
       reason: 'session_band',
       retryAt: '2026-09-01T00:00:00.000Z',
       coverage: 'partial',
     });
+  });
+
+  it('reads filtered when the edge reports it, keeping the batch reconcilable', () => {
+    // 10 submitted: 6 stored, 1 already known, 2 excluded by the project's own config, 1 lost.
+    const parsed = parseIngestionReceipt({
+      outcome: 'partial',
+      accepted: 6,
+      duplicates: 1,
+      filtered: 2,
+      dropped: 1,
+      coverage: 'partial',
+    });
+
+    expect(parsed).toMatchObject({ filtered: 2, dropped: 1 });
+    expect(parsed!.accepted + parsed!.duplicates + parsed!.filtered + parsed!.dropped).toBe(10);
+  });
+
+  it('voids the receipt when filtered is present but malformed', () => {
+    // Present-and-wrong is a contract violation; only absent may default to zero.
+    expect(
+      parseIngestionReceipt({
+        outcome: 'accepted',
+        accepted: 1,
+        duplicates: 0,
+        filtered: -2,
+        dropped: 0,
+        coverage: 'complete',
+      }),
+    ).toBeNull();
   });
 
   it.each([
@@ -75,7 +107,7 @@ describe('parseIngestionReceipt', () => {
       'session_band',
       'event_guardrail',
       'project_paused',
-      'account_closed',
+      'account_paused',
     ]);
   });
 });

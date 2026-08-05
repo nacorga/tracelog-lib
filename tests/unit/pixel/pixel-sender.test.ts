@@ -78,6 +78,7 @@ describe('sendBatch', () => {
       outcome: 'partial',
       accepted: 1,
       duplicates: 0,
+      filtered: 0,
       dropped: 1,
       coverage: 'partial',
     } as const;
@@ -107,6 +108,7 @@ describe('sendBatch', () => {
       outcome: 'rejected',
       accepted: 0,
       duplicates: 0,
+      filtered: 0,
       dropped: 2,
       reason: 'session_band',
       coverage: 'partial',
