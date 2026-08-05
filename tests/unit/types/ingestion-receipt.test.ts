@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseIngestionReceipt } from '../../../src/types/ingestion-receipt.types';
+import {
+  INGESTION_REJECTION_REASONS,
+  isIngestionRejectionReason,
+  parseIngestionReceipt,
+} from '../../../src/types/ingestion-receipt.types';
 
 describe('parseIngestionReceipt', () => {
   it('accepts the stable receipt fields and ignores additive envelope metadata', () => {
@@ -34,5 +38,44 @@ describe('parseIngestionReceipt', () => {
     { outcome: 'unknown', accepted: 1, duplicates: 0, dropped: 0, coverage: 'complete' },
   ])('returns null for a legacy or malformed body', (body) => {
     expect(parseIngestionReceipt(body)).toBeNull();
+  });
+
+  it('drops an unrecognised reason rather than passing it through', () => {
+    const parsed = parseIngestionReceipt({
+      outcome: 'rejected',
+      accepted: 0,
+      duplicates: 0,
+      dropped: 1,
+      reason: 'something_new',
+      coverage: 'partial',
+    });
+
+    expect(parsed).not.toBeNull();
+    expect(parsed).not.toHaveProperty('reason');
+  });
+
+  // The wire contract is shared with tracelog-api and tracelog-middleware; a rename on one side
+  // silently degrades the reason to `undefined` on the others rather than failing loudly.
+  it.each([...INGESTION_REJECTION_REASONS])('accepts the shared wire reason %s', (reason) => {
+    expect(isIngestionRejectionReason(reason)).toBe(true);
+    expect(
+      parseIngestionReceipt({
+        outcome: 'rejected',
+        accepted: 0,
+        duplicates: 0,
+        dropped: 1,
+        reason,
+        coverage: 'partial',
+      }),
+    ).toMatchObject({ reason });
+  });
+
+  it('pins the reason set to the api/middleware contract', () => {
+    expect([...INGESTION_REJECTION_REASONS]).toEqual([
+      'session_band',
+      'event_guardrail',
+      'project_paused',
+      'account_closed',
+    ]);
   });
 });

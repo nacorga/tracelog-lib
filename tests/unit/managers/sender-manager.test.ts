@@ -173,7 +173,6 @@ describe('SenderManager - async send via fetch()', () => {
     await expect(sender.sendEventsQueue(makeQueue(), { onSuccess })).resolves.toBe(true);
 
     expect(onSuccess.mock.calls[0]?.[3]).toEqual(receipt);
-    expect(sender.getLastIngestionReceipt()).toEqual(receipt);
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
@@ -253,8 +252,57 @@ describe('SenderManager - async send via fetch()', () => {
     await expect(sender.sendEventsQueue(makeQueue(), { onFailure })).resolves.toBe(false);
 
     expect(onFailure).toHaveBeenCalledWith(receipt);
-    expect(sender.getLastIngestionReceipt()).toEqual(receipt);
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('ignores a rejection receipt from a responder that does not prove it is TraceLog', async () => {
+    // Same receipt fields, but the envelope signature is absent: no `statusCode` echoing the HTTP
+    // status, no `error` code. A parked page, captive portal, or CDN backend answering the collect
+    // URL must not be able to tell the merchant their account is closed and their traffic dropped.
+    const response = ingestErrorResponse(403, 'FORBIDDEN');
+    response.json = async (): Promise<unknown> =>
+      await Promise.resolve({
+        outcome: 'rejected',
+        accepted: 0,
+        duplicates: 0,
+        dropped: 99,
+        reason: 'account_closed',
+        coverage: 'partial',
+      });
+    (global as any).fetch = vi.fn().mockResolvedValue(response);
+
+    const { sender } = makeSender();
+    const onFailure = vi.fn();
+
+    await expect(sender.sendEventsQueue(makeQueue(), { onFailure })).resolves.toBe(false);
+
+    expect(onFailure).toHaveBeenCalledWith(undefined);
+  });
+
+  it('delivers each send its own receipt when two sends complete out of order', async () => {
+    const first = { outcome: 'partial', accepted: 1, duplicates: 0, dropped: 1, coverage: 'partial' } as const;
+    const second = { outcome: 'accepted', accepted: 3, duplicates: 0, dropped: 0, coverage: 'complete' } as const;
+    let releaseFirst: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (releaseFirst = resolve));
+    (global as any).fetch = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        await gate;
+        return jsonResponse(200, first);
+      })
+      .mockImplementationOnce(async () => await Promise.resolve(jsonResponse(200, second)));
+
+    const { sender } = makeSender();
+    const onFirst = vi.fn();
+    const onSecond = vi.fn();
+
+    const firstSend = sender.sendEventsQueue(makeQueue(), { onSuccess: onFirst });
+    await sender.sendEventsQueue(makeQueue(), { onSuccess: onSecond });
+    releaseFirst?.();
+    await firstSend;
+
+    expect(onFirst.mock.calls[0]?.[3]).toEqual(first);
+    expect(onSecond.mock.calls[0]?.[3]).toEqual(second);
   });
 
   it('does retry on 408 Request Timeout (treated as transient)', async () => {

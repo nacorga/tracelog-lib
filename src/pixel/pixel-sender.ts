@@ -7,6 +7,11 @@
  *
  * Best-effort: failures are silently swallowed. The authenticated server-side
  * webhook carries the revenue contract; pixel events are funnel-only.
+ *
+ * The returned receipt is opportunistic. `keepalive` guarantees the *request*
+ * outlives the page, not that the response body can still be read — on the
+ * checkout/unload path the awaited body may never arrive, yielding `null`.
+ * Treat a `null` receipt as "no information", never as "nothing was ingested".
  */
 
 import { type IngestionReceipt, parseIngestionReceipt } from '../types/ingestion-receipt.types';

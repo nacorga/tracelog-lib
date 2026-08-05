@@ -86,22 +86,29 @@ describe('sendBatch', () => {
     await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toEqual(receipt);
   });
 
-  it('swallows fetch rejections silently', () => {
+  // Resolving to null is asserted rather than "does not throw": `sendBatch` is async, so a
+  // synchronous-throw assertion passes even with every catch block deleted.
+  it('swallows fetch rejections silently', async () => {
     global.fetch = vi.fn().mockRejectedValue(new TypeError('network down'));
 
-    expect(() => {
-      void sendBatch({ projectId: 'proj-abc' }, BODY);
-    }).not.toThrow();
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
   });
 
-  it('swallows synchronous fetch throws silently', () => {
+  it('swallows synchronous fetch throws silently', async () => {
     global.fetch = vi.fn().mockImplementation(() => {
       throw new Error('fetch unavailable');
     });
 
-    expect(() => {
-      void sendBatch({ projectId: 'proj-abc' }, BODY);
-    }).not.toThrow();
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
+  });
+
+  it('returns null when the response body is not JSON', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => await Promise.reject(new SyntaxError('not json')),
+    });
+
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
   });
 
   it('drops the request when projectId is empty (avoids 404 on `/p//collect`)', () => {

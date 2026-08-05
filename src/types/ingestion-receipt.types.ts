@@ -12,14 +12,26 @@ export interface IngestionReceipt {
   coverage: 'complete' | 'partial';
 }
 
-const REJECTION_REASONS: readonly IngestionRejectionReason[] = [
+export const INGESTION_REJECTION_REASONS: readonly IngestionRejectionReason[] = [
   'session_band',
   'event_guardrail',
   'project_paused',
   'account_closed',
 ];
 
-/** Parses the additive receipt while remaining compatible with legacy boolean/empty bodies. */
+export function isIngestionRejectionReason(value: unknown): value is IngestionRejectionReason {
+  return INGESTION_REJECTION_REASONS.includes(value as IngestionRejectionReason);
+}
+
+/**
+ * Parses the additive receipt while remaining compatible with legacy boolean/empty bodies.
+ *
+ * Structural strictness is the only thing standing between a receipt and the claims it makes
+ * about TraceLog's own records (`dropped`, `account_closed`), so every field is checked against
+ * the wire contract and an unknown `reason` degrades to `undefined` rather than passing through.
+ * Callers reading a receipt off a rejection must additionally prove the responder is TraceLog —
+ * see `readTraceLogResponseMetadata` in `SenderManager`.
+ */
 export function parseIngestionReceipt(value: unknown): IngestionReceipt | null {
   if (typeof value !== 'object' || value === null) return null;
   const body = value as Record<string, unknown>;
@@ -33,9 +45,7 @@ export function parseIngestionReceipt(value: unknown): IngestionReceipt | null {
   const dropped = count(body.dropped);
   if (accepted === null || duplicates === null || dropped === null) return null;
 
-  const reason = REJECTION_REASONS.includes(body.reason as IngestionRejectionReason)
-    ? (body.reason as IngestionRejectionReason)
-    : undefined;
+  const reason = isIngestionRejectionReason(body.reason) ? body.reason : undefined;
 
   return {
     outcome: body.outcome,
