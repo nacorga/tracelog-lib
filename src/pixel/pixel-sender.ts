@@ -5,7 +5,7 @@
  * `api.tracelog.io/events/collect` — because the middleware has the only CORS
  * handler that accepts `Origin: null` from sandboxed iframes.
  *
- * Best-effort: failures are silently swallowed. The webhook (Task 03) carries
+ * Best-effort: failures are silently swallowed. The order webhook is what carries
  * the revenue contract; pixel events are funnel-only and accept ~5-30% loss.
  */
 
