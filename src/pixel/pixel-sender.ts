@@ -6,7 +6,8 @@
  * handler that accepts `Origin: null` from sandboxed iframes.
  *
  * Best-effort: failures are silently swallowed. The authenticated server-side
- * webhook carries the revenue contract; pixel events are funnel-only.
+ * webhook carries the revenue contract; pixel events are funnel-only and
+ * accept ~5-30% loss.
  *
  * The returned receipt is opportunistic. `keepalive` guarantees the *request*
  * outlives the page, not that the response body can still be read — on the
