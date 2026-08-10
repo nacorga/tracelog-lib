@@ -31,6 +31,50 @@
 
 
 
+
+## [3.5.0] - 2026-08-10
+
+### ✨ Features
+
+- Add 'project_capacity' to IngestionRejectionReason and update related tests ([d5a3b8c](../../commit/d5a3b8cd47e309878cda4f3e2ddb480e694c9bbc))
+- Implement parseCollectReceipt for handling collect responses and update related logic ([0925586](../../commit/09255860aff10646960912acfd1998cffde76de4))
+- Add ingestion receipt handling and update API documentation ([7fa8a49](../../commit/7fa8a498a4b36c4504489f5f15dc8597687ce48e))
+- Propagate durable receipts ([285ca75](../../commit/285ca75feb03abe1f76919a889e37f81022f6be0))
+
+### 🐛 Bug Fixes
+
+- Clarify debug visibility in noteReceipt documentation ([a5abf4a](../../commit/a5abf4ad9244268cef19c3f2aef4e6e7744d7e74))
+- Align the receipt contract with the server vocabulary ([e7f4e4c](../../commit/e7f4e4cf18d1892925e512a59e9721cfd078ec79))
+- Hold pixel receipts to the same provenance rule ([320754c](../../commit/320754ca265a86b9c57004bb2d3f1121705ff247))
+- Gate receipts behind TraceLog envelope proof ([23c2219](../../commit/23c22190a5671a9f614e0ecc864811f2db9ea10c))
+
+### 📚 Documentation
+
+- Name the revenue path, not the work item that built it ([dee44a8](../../commit/dee44a80f297eeebfc0a434af9bc1743298e2ff0))
+- Add TypeScript build info files to .gitignore ([efe108c](../../commit/efe108c69c5f00e589e32635a9cedee2eba0f473))
+
+### 🔧 Other Changes
+
+- Merge pull request #134 from nacorga/release/20260810.1 ([7fcda82](../../commit/7fcda82e206159df665e31dc21b1c33b9215bfdc))
+- Merge pull request #132 from nacorga/codex/tra-467-account-policy-normalization ([4ae8c2c](../../commit/4ae8c2cab9e3a8f2cd60a43973ad700883ac712d))
+- Clear the newly published high-severity advisories ([8e1b0f9](../../commit/8e1b0f9f8d317191feff52b63d6c195bc77f601e))
+- Merge remote-tracking branch 'origin/develop' into codex/tra-467-account-policy-normalization ([2f7c525](../../commit/2f7c525661395856d1aafddcc748c6fe8785541b))
+- Merge branch 'main' of github.com:nacorga/tracelog-lib into develop ([5a42e6b](../../commit/5a42e6b5525d10272fa1db842d5fddc94f6c2903))
+- Clear the high-severity advisories failing the security gate ([c8f76e2](../../commit/c8f76e20dcffbbee6b9b360994d950a17c1abc28))
+- Merge pull request #133 from nacorga/codex/tra-472-ingestion-receipt-contract ([c559342](../../commit/c5593424e7313a5db3039938307feebc0051beec))
+- Initialize TRA-467 integration ([b7726f9](../../commit/b7726f9e9f699e125437792b8d112bda78cd26d4))
+- Merge pull request #131 from nacorga/fix/internal-refs-sweep ([5a26793](../../commit/5a267931022bce519786ed66fe28d0db565a825a))
+
+### 👥 Contributors
+
+Thanks to all contributors who made this release possible:
+
+- Ignacio Cortes Garcia
+- Nacho
+
+**Full Changelog**: https://github.com/nacorga/tracelog-lib/compare/v3.4.1...v3.5.0
+
+
 ## [3.4.1] - 2026-07-26
 
 ### ✨ Features
