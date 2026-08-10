@@ -30,7 +30,7 @@ import {
   type IngestionReceipt,
 } from '../types';
 // Deep import: these are transport internals, deliberately not re-exported by the types barrel.
-import { hasIngestEnvelopeSignature, parseIngestionReceipt } from '../types/ingestion-receipt.types';
+import { hasIngestEnvelopeSignature, parseCollectReceipt } from '../types/ingestion-receipt.types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -694,6 +694,10 @@ export class SenderManager extends StateManager {
    * the same bar for the same reason — it reports how much of the merchant's traffic was dropped and
    * why, so an unvouched one is a lie about their data, not a missing log detail. A `null` receipt
    * and an `undefined` code both mean exactly "nothing here identifies the responder as TraceLog".
+   *
+   * {@link parseCollectReceipt} then adds the consistency half: a rejection whose receipt reports
+   * `dropped: 0` is discarded, because the server derives `outcome`/`coverage` from `dropped` and
+   * such a body arrives claiming the refused batch was accepted and complete.
    */
   private async readTraceLogResponseMetadata(
     response: Response,
@@ -709,7 +713,7 @@ export class SenderManager extends StateManager {
         return { receipt: null };
       }
 
-      const receipt = this.noteReceipt(parseIngestionReceipt(body));
+      const receipt = this.noteReceipt(parseCollectReceipt(body, response));
       return isUsableErrorCode(body.error) ? { responseCode: body.error, receipt } : { receipt };
     } catch {
       // Best-effort only. Status still determines permanence.
@@ -748,15 +752,16 @@ export class SenderManager extends StateManager {
   /**
    * Reads the receipt off a 2xx collect response.
    *
-   * No envelope signature exists here — the success body is `CollectResponse`, which carries no
-   * `statusCode` to echo — so {@link parseIngestionReceipt}'s structural strictness is the whole
-   * check: three non-negative integers plus two closed literal unions, a shape nothing answering
-   * the route by accident produces. A 2xx also already means the responder accepted the batch,
-   * so the receipt only refines an acceptance the status itself established.
+   * No envelope signature is required here — the success body is `CollectResponse`, which carries
+   * no `statusCode` to echo, and a 2xx already means the responder accepted the batch, so the
+   * receipt only refines an acceptance the status itself established. What remains is
+   * {@link parseCollectReceipt}'s structural strictness (three non-negative integers plus two
+   * closed literal unions, a shape nothing answering the route by accident produces) and its
+   * refusal of a receipt that accounts for no events at all.
    */
   private async readIngestionReceipt(response: Response): Promise<IngestionReceipt | null> {
     try {
-      return this.noteReceipt(parseIngestionReceipt(await response.clone().json()));
+      return this.noteReceipt(parseCollectReceipt(await response.clone().json(), response));
     } catch {
       return null;
     }

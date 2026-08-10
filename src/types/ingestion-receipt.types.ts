@@ -106,3 +106,41 @@ export function parseIngestionReceipt(value: unknown): IngestionReceipt | null {
     coverage: body.coverage,
   };
 }
+
+/**
+ * Reads a receipt off a collect response, applying the checks that depend on the RESPONSE rather
+ * than on the body's shape. Every sender goes through this; nothing calls
+ * {@link parseIngestionReceipt} directly.
+ *
+ * The split is deliberate. {@link parseIngestionReceipt} is the structural wire contract, mirrored
+ * near-verbatim by tracelog-middleware and tracelog-api, and keeping the three comparable is what
+ * stops the shape from drifting. The two checks below are the *client's* own scepticism about a
+ * body it did not write, and they depend on facts only this side knows — so layering them here
+ * keeps the shared half shared.
+ *
+ * A receipt that survives all of this is one the caller may quote to a merchant. A `null` means
+ * exactly "no information", and must never be read as "nothing was ingested".
+ */
+export function parseCollectReceipt(body: unknown, response: { ok: boolean; status: number }): IngestionReceipt | null {
+  // Provenance, rejections only: a receipt riding on a refusal must prove a TraceLog host wrote it.
+  // A 2xx needs no signature — the status already established that the responder accepted the batch.
+  if (!response.ok && !hasIngestEnvelopeSignature(body, response.status)) return null;
+
+  const receipt = parseIngestionReceipt(body);
+  if (!receipt) return null;
+
+  // A receipt that accounts for NO events is not describing this batch. The client never submits an
+  // empty one — `EventManager` returns early on an empty queue or an empty send plan, and
+  // `SenderManager` discards an empty persisted batch rather than recovering it — so every response
+  // it reads answers a batch that had events in it. An all-zero body therefore comes from a layer
+  // that lost track of what it was answering, and its `accepted: 0` would read as "nothing stored".
+  if (receipt.accepted + receipt.duplicates + receipt.filtered + receipt.dropped === 0) return null;
+
+  // A refusal that refused nothing is a contradiction, and the dangerous direction of one: the
+  // server derives `outcome` and `coverage` from `dropped`, so a rejection carrying `dropped: 0`
+  // arrives claiming `accepted` / `complete`. Quoting that would tell a merchant a batch the server
+  // just refused was stored intact — strictly worse than reporting no receipt at all.
+  if (!response.ok && receipt.dropped === 0) return null;
+
+  return receipt;
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   INGESTION_REJECTION_REASONS,
   isIngestionRejectionReason,
+  parseCollectReceipt,
   parseIngestionReceipt,
 } from '../../../src/types/ingestion-receipt.types';
 
@@ -140,5 +141,59 @@ describe('parseIngestionReceipt', () => {
       'project_paused',
       'account_paused',
     ]);
+  });
+});
+
+describe('parseCollectReceipt', () => {
+  const ok = { ok: true, status: 200 };
+  const rejected = { ok: false, status: 400 };
+
+  const receipt = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    outcome: 'partial',
+    accepted: 1,
+    duplicates: 0,
+    filtered: 0,
+    dropped: 1,
+    coverage: 'partial',
+    ...over,
+  });
+
+  it('returns a well-formed receipt off a 2xx without requiring an envelope signature', () => {
+    expect(parseCollectReceipt(receipt(), ok)).toMatchObject({ accepted: 1, dropped: 1 });
+  });
+
+  it('requires the envelope signature on a rejection', () => {
+    const refusal = receipt({ outcome: 'rejected', accepted: 0, dropped: 2 });
+
+    expect(parseCollectReceipt(refusal, rejected)).toBeNull();
+    expect(parseCollectReceipt({ statusCode: 400, ...refusal }, rejected)).toMatchObject({ dropped: 2 });
+  });
+
+  // An upstream layer that loses track of the batch it is answering emits all-zero counters. The
+  // client never submits an empty batch, so such a body is never describing the request it answers,
+  // and its `accepted: 0` would otherwise read as "nothing stored".
+  it('rejects a receipt that accounts for no events at all', () => {
+    const empty = { outcome: 'accepted', accepted: 0, duplicates: 0, filtered: 0, dropped: 0, coverage: 'complete' };
+
+    // Structurally valid — the shared wire parser accepts it, which is exactly why the client
+    // cannot rely on that parser alone.
+    expect(parseIngestionReceipt(empty)).not.toBeNull();
+    expect(parseCollectReceipt(empty, ok)).toBeNull();
+    expect(parseCollectReceipt({ statusCode: 400, ...empty }, rejected)).toBeNull();
+  });
+
+  // The dangerous direction: `outcome`/`coverage` are derived from `dropped` server-side, so a
+  // refusal carrying `dropped: 0` arrives asserting the batch was accepted and complete. Quoting it
+  // would tell a merchant that events the server just refused were stored intact.
+  it('rejects a refusal whose receipt reports no loss', () => {
+    const contradiction = {
+      statusCode: 400,
+      ...receipt({ outcome: 'accepted', accepted: 5, dropped: 0, coverage: 'complete' }),
+    };
+
+    expect(parseIngestionReceipt(contradiction)).not.toBeNull();
+    expect(parseCollectReceipt(contradiction, rejected)).toBeNull();
+    // The same body on a 2xx is coherent — nothing was refused, so nothing is being contradicted.
+    expect(parseCollectReceipt(contradiction, ok)).toMatchObject({ accepted: 5, dropped: 0 });
   });
 });

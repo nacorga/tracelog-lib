@@ -1055,7 +1055,12 @@ submitted === accepted + duplicates + filtered + dropped
 
 **A receipt is only read when the responder proves it is TraceLog.** On a rejection, the body must carry the ingest error envelope's signature — a `statusCode` echoing the HTTP status — which a parked page, captive portal, or CDN backend answering the collect URL cannot produce. A receipt states how much of a merchant's traffic was refused and why, so an unvouched one would be a false claim about their data rather than a missing detail. On a 2xx no signature exists and none is needed: the status already established that the responder accepted the batch.
 
-**Absence never means zero.** A `null` receipt means "no information" — a middleware predating the contract, a non-JSON body, or a response the page unloaded before reading. It must never be read as "nothing was ingested". Batches flushed via `navigator.sendBeacon` (page hidden, `pagehide`/`beforeunload`, and `{ critical: true }` events) expose no response body at all, so they never produce a receipt by construction.
+**A receipt must also be consistent with the response that carried it.** Two bodies are structurally valid yet discarded, because both would misreport a merchant's own data:
+
+- One that accounts for **no events at all** (every counter zero). The library never submits an empty batch, so such a body is not describing the request it answers — and its `accepted: 0` would read as "nothing stored".
+- A **refusal reporting `dropped: 0`**. The server derives `outcome` and `coverage` from `dropped`, so this arrives claiming `accepted` / `complete` on a batch it just refused — the inversion the receipt exists to prevent, and worse than reporting nothing.
+
+**Absence never means zero.** A `null` receipt means "no information" — a middleware predating the contract, a non-JSON body, a response the page unloaded before reading, or any of the checks above failing. It must never be read as "nothing was ingested". Batches flushed via `navigator.sendBeacon` (page hidden, `pagehide`/`beforeunload`, and `{ critical: true }` events) expose no response body at all, so they never produce a receipt by construction.
 
 ---
 
