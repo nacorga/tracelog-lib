@@ -21,7 +21,7 @@ export function registerShopifyPixel(api: ShopifyPixelApi, settings: PixelSender
   const handle = (eventName: ShopifyEventName, payload: unknown): void => {
     const body = mapEventToBody(payload as Parameters<typeof mapEventToBody>[0], eventName);
     if (!body) return;
-    sendBatch(settings, body);
+    void sendBatch(settings, body);
   };
 
   api.analytics.subscribe('cart_viewed', (event) => {

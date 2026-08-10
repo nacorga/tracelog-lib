@@ -27,15 +27,31 @@ import {
   PermanentError,
   RateLimitError,
   TimeoutError,
+  type IngestionReceipt,
 } from '../types';
+// Deep import: these are transport internals, deliberately not re-exported by the types barrel.
+import { hasIngestEnvelopeSignature, parseCollectReceipt } from '../types/ingestion-receipt.types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
 
 interface SendCallbacks {
-  onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue) => void;
-  onFailure?: () => void;
+  onSuccess?: (eventCount?: number, events?: any[], body?: EventsQueue, receipt?: IngestionReceipt) => void;
+  onFailure?: (receipt?: IngestionReceipt) => void;
 }
+
+/**
+ * Outcome of one `send()` call. The receipt travels back as a return value rather than on the
+ * instance so it can never be attributed to a different batch: `sendEventsQueue()` has no
+ * in-flight guard, so two overlapping sends would otherwise race over one shared field.
+ */
+interface SendResult {
+  ok: boolean;
+  receipt: IngestionReceipt | null;
+}
+
+/** Every failure path returns the same receipt-less result. */
+const FAILED_SEND: SendResult = Object.freeze({ ok: false, receipt: null });
 
 /**
  * Client-emitted diagnostic beacon reasons. `events_blocked` (403 at the domain gate) and
@@ -338,22 +354,22 @@ export class SenderManager extends StateManager {
     const stableBody = this.ensureBatchMetadata(body);
 
     try {
-      const success = await this.send(stableBody);
+      const { ok, receipt } = await this.send(stableBody);
 
-      if (success) {
+      if (ok) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(stableBody.events.length, stableBody.events, stableBody);
+        callbacks?.onSuccess?.(stableBody.events.length, stableBody.events, stableBody, receipt ?? undefined);
       } else {
         this.persistEvents(stableBody);
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(receipt ?? undefined);
       }
 
-      return success;
+      return ok;
     } catch (error) {
       if (error instanceof PermanentError) {
         this.logPermanentError('Permanent error, not retrying', error);
         this.clearPersistedEvents();
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(error.ingestionReceipt);
         return false;
       }
 
@@ -413,20 +429,20 @@ export class SenderManager extends StateManager {
         return;
       }
 
-      const success = await this.send(recoveryBody);
+      const { ok, receipt } = await this.send(recoveryBody);
 
-      if (success) {
+      if (ok) {
         this.clearPersistedEvents();
-        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, recoveryBody);
+        callbacks?.onSuccess?.(persistedData.events.length, persistedData.events, recoveryBody, receipt ?? undefined);
       } else {
         this.persistEventsWithFailureCount(recoveryBody, recoveryFailures + 1, true);
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(receipt ?? undefined);
       }
     } catch (error) {
       if (error instanceof PermanentError) {
         this.logPermanentError('Permanent error during recovery, clearing persisted events', error);
         this.clearPersistedEvents();
-        callbacks?.onFailure?.();
+        callbacks?.onFailure?.(error.ingestionReceipt);
         return;
       }
 
@@ -452,17 +468,17 @@ export class SenderManager extends StateManager {
     return new Promise((resolve) => setTimeout(resolve, exponentialDelay + jitter));
   }
 
-  private async send(body: EventsQueue): Promise<boolean> {
+  private async send(body: EventsQueue): Promise<SendResult> {
     const requestBody = this.ensureBatchMetadata(body, body._metadata?.idempotency_token);
 
     if (this.apiUrl.includes(SpecialApiUrl.Fail)) {
       log('debug', 'Fail mode: simulating network failure', { data: { events: requestBody.events.length } });
-      return false;
+      return FAILED_SEND;
     }
 
     if (this.apiUrl.includes(SpecialApiUrl.Localhost)) {
       log('debug', 'Success mode: simulating successful send', { data: { events: requestBody.events.length } });
-      return true;
+      return { ok: true, receipt: null };
     }
 
     if (this.isRateLimited()) {
@@ -472,7 +488,7 @@ export class SenderManager extends StateManager {
           events: requestBody.events.length,
         },
       });
-      return false;
+      return FAILED_SEND;
     }
 
     if (this.consecutiveNetworkFailures >= MAX_CONSECUTIVE_NETWORK_FAILURES) {
@@ -484,7 +500,7 @@ export class SenderManager extends StateManager {
             cooldownRemainingMs: CIRCUIT_BREAKER_COOLDOWN_MS - elapsed,
           },
         });
-        return false;
+        return FAILED_SEND;
       }
       // Half-open: allow one probe batch through.
     }
@@ -498,6 +514,7 @@ export class SenderManager extends StateManager {
         const response = await this.sendWithTimeout(url, payload);
 
         if (response.ok) {
+          const receipt = await this.readIngestionReceipt(response);
           if (attempt > 1) {
             log('info', `Send succeeded after ${attempt - 1} retry attempt(s)`, {
               data: { events: requestBody.events.length, attempt },
@@ -506,10 +523,10 @@ export class SenderManager extends StateManager {
 
           this.consecutiveNetworkFailures = 0;
           this.circuitOpenedAt = 0;
-          return true;
+          return { ok: true, receipt };
         }
 
-        return false;
+        return FAILED_SEND;
       } catch (error) {
         const isLastAttempt = attempt === MAX_SEND_RETRIES + 1;
 
@@ -580,7 +597,7 @@ export class SenderManager extends StateManager {
           log('debug', 'All retry attempts timed out, preserving batch for retry', {
             data: { events: requestBody.events.length },
           });
-          return false;
+          return FAILED_SEND;
         }
 
         if (!hadHttpResponse) {
@@ -597,11 +614,11 @@ export class SenderManager extends StateManager {
           this.circuitOpenedAt = 0;
         }
 
-        return false;
+        return FAILED_SEND;
       }
     }
 
-    return false;
+    return FAILED_SEND;
   }
 
   private async sendWithTimeout(url: string, payload: string): Promise<Response> {
@@ -631,11 +648,11 @@ export class SenderManager extends StateManager {
           response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
 
         if (isPermanentError) {
-          const responseCode = await this.readTraceLogErrorCode(response);
+          const { responseCode, receipt } = await this.readTraceLogResponseMetadata(response);
           const message = responseCode
             ? `HTTP ${response.status}: ${response.statusText} (${responseCode})`
             : `HTTP ${response.status}: ${response.statusText}`;
-          throw new PermanentError(message, response.status, responseCode);
+          throw new PermanentError(message, response.status, responseCode, receipt ?? undefined);
         }
 
         if (response.status === 429) {
@@ -661,30 +678,94 @@ export class SenderManager extends StateManager {
   }
 
   /**
-   * Extracts the application error code from a 4xx body, and with it the proof that a TraceLog
-   * host — not an arbitrary server answering the same name — produced the response.
+   * Extracts the application error code AND the ingestion receipt from a 4xx body, and with them
+   * the proof that a TraceLog host — not an arbitrary server answering the same name — produced
+   * the response.
    *
-   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path }`,
+   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path, ...receipt }`,
    * the single shape every rejection arrives in (tracelog-middleware's `AllExceptionsFilter`, which
-   * renders an exception's own `code` into `error`). `error` counts only when `statusCode` echoes
-   * the HTTP status — that pairing is the envelope's signature, and neither a generic
+   * renders an exception's own `code` into `error`). Both readings count only when `statusCode`
+   * echoes the HTTP status — that pairing is the envelope's signature, and neither a generic
    * `{"error":"Not Found"}` nor a bare `{"code":"..."}` from a foreign host can produce it.
    *
    * An uncorroborated code is deliberately NOT read: a code is both a log detail and the authorship
    * proof {@link HealthBeaconReason} `unknown_project` gates on, so accepting one nobody vouched for
-   * would let any responder authorize a claim about TraceLog's own records. `undefined` therefore
-   * means exactly "nothing here identifies the responder as TraceLog".
+   * would let any responder authorize a claim about TraceLog's own records. The receipt is held to
+   * the same bar for the same reason — it reports how much of the merchant's traffic was dropped and
+   * why, so an unvouched one is a lie about their data, not a missing log detail. A `null` receipt
+   * and an `undefined` code both mean exactly "nothing here identifies the responder as TraceLog".
+   *
+   * {@link parseCollectReceipt} then adds the consistency half: a rejection whose receipt reports
+   * `dropped: 0` is discarded, because the server derives `outcome`/`coverage` from `dropped` and
+   * such a body arrives claiming the refused batch was accepted and complete.
    */
-  private async readTraceLogErrorCode(response: Response): Promise<string | undefined> {
+  private async readTraceLogResponseMetadata(
+    response: Response,
+  ): Promise<{ responseCode?: string; receipt: IngestionReceipt | null }> {
     try {
       const body = (await response.clone().json()) as { statusCode?: unknown; error?: unknown };
-      if (body.statusCode === response.status && isUsableErrorCode(body.error)) {
-        return body.error;
+
+      // The envelope signature gates BOTH readings, and it is checked before either is taken.
+      // A receipt asserts more than a code does — `dropped`, and `account_paused`/`project_paused`
+      // are statements about TraceLog's own account records — so the claim that needs the most
+      // authorship proof must never be the one that skips it.
+      if (!hasIngestEnvelopeSignature(body, response.status)) {
+        return { receipt: null };
       }
+
+      const receipt = this.noteReceipt(parseCollectReceipt(body, response));
+      return isUsableErrorCode(body.error) ? { responseCode: body.error, receipt } : { receipt };
     } catch {
       // Best-effort only. Status still determines permanence.
     }
-    return undefined;
+    return { receipt: null };
+  }
+
+  /**
+   * Surfaces a receipt that reports data loss, and returns it unchanged so it can wrap a parse.
+   *
+   * `dropped` is the only counter worth a line: it is the one that means events were refused
+   * against the caller's intent. `filtered` is the project's own sampling or exclusions working
+   * exactly as configured, so keying on it would emit on every batch of a healthy project.
+   *
+   * `debug` with no `visibility` is deliberate per the logging policy. A refusal is a server-side
+   * account, quota, or guardrail decision that a visitor to the merchant's site can do nothing
+   * about and must never see, so this stays development-only — production is silent even under
+   * `?tlog_mode=qa`, which is reserved for custom-event verification.
+   */
+  private noteReceipt(receipt: IngestionReceipt | null): IngestionReceipt | null {
+    if (receipt && receipt.dropped > 0) {
+      log('debug', 'Ingestion receipt reports dropped events', {
+        data: {
+          outcome: receipt.outcome,
+          accepted: receipt.accepted,
+          dropped: receipt.dropped,
+          coverage: receipt.coverage,
+          ...(receipt.reason ? { reason: receipt.reason } : {}),
+          ...(receipt.retryAt ? { retryAt: receipt.retryAt } : {}),
+        },
+      });
+    }
+
+    return receipt;
+  }
+
+  /**
+   * Reads the receipt off a 2xx collect response.
+   *
+   * No envelope signature is required here — the success body is `CollectResponse`, which carries
+   * no `statusCode` to echo, and a 2xx already means the responder accepted the batch, so the
+   * receipt only refines an acceptance the status itself established. What remains is
+   * {@link parseCollectReceipt}'s structural strictness (three non-negative integers plus two
+   * closed literal unions, a shape nothing answering the route by accident produces) and its
+   * refusal of a receipt that accounts for no events at all.
+   */
+  private async readIngestionReceipt(response: Response): Promise<IngestionReceipt | null> {
+    try {
+      return this.noteReceipt(parseCollectReceipt(await response.clone().json(), response));
+    } catch {
+      return null;
+    }
   }
 
   private sendQueueSyncInternal(body: EventsQueue): boolean {

@@ -5,6 +5,7 @@
 /.playwright-mcp
 /.archive
 /dist
+*.tsbuildinfo
 /node_modules
 /coverage
 /test-results

@@ -929,6 +929,11 @@ import {
   EventsQueue,
   IdentifyData,
 
+  // Ingestion receipt (types only — see Network errors)
+  IngestionReceipt,
+  IngestionOutcome,
+  IngestionRejectionReason,
+
   // Common
   MetadataType,
   InitResult,
@@ -1022,6 +1027,40 @@ TraceLog uses a retry-first, then persistence-based recovery model:
 **Multi-tab protection:** a 1-second window prevents two tabs from re-sending the same persisted batch simultaneously.
 
 **Idempotency.** Every batch carries `_metadata.idempotency_token` (deterministic FNV-1a hash of sorted event IDs, salted by `user_id` and `session_id`). The same retried batch produces the same token, so the backend can dedupe retries server-side.
+
+### Ingestion receipts
+
+A collect response may carry a **receipt** describing what the server did with the batch. The library parses it on both a 2xx and a rejection, and logs a `debug` line whenever one reports dropped events. It is not surfaced on any public method today; the type is exported so the contract has one published definition.
+
+```typescript
+interface IngestionReceipt {
+  outcome: 'accepted' | 'partial' | 'rejected';
+  accepted: number;
+  duplicates: number;
+  filtered: number;
+  dropped: number;
+  reason?: 'session_band' | 'event_guardrail' | 'project_paused' | 'project_capacity' | 'account_paused';
+  retryAt?: string;
+  coverage: 'complete' | 'partial';
+}
+```
+
+Every event lands in exactly one counter, so a batch reconciles:
+
+```
+submitted === accepted + duplicates + filtered + dropped
+```
+
+`filtered` and `dropped` both remove events from the stored set, and the difference is the point. **`filtered`** is the project's own configuration doing what it was asked — sampling, excluded event types, excluded URL paths — plus shapes a newer library no longer sends. It is expected and permanent, never a defect. **`dropped`** is data refused against the caller's intent, and is the only counter that means loss; `coverage` therefore keys on `dropped` alone.
+
+**A receipt is only read when the responder proves it is TraceLog.** On a rejection, the body must carry the ingest error envelope's signature — a `statusCode` echoing the HTTP status — which a parked page, captive portal, or CDN backend answering the collect URL cannot produce. A receipt states how much of a merchant's traffic was refused and why, so an unvouched one would be a false claim about their data rather than a missing detail. On a 2xx no signature exists and none is needed: the status already established that the responder accepted the batch.
+
+**A receipt must also be consistent with the response that carried it.** Two bodies are structurally valid yet discarded, because both would misreport a merchant's own data:
+
+- One that accounts for **no events at all** (every counter zero). The library never submits an empty batch, so such a body is not describing the request it answers — and its `accepted: 0` would read as "nothing stored".
+- A **refusal reporting `dropped: 0`**. The server derives `outcome` and `coverage` from `dropped`, so this arrives claiming `accepted` / `complete` on a batch it just refused — the inversion the receipt exists to prevent, and worse than reporting nothing.
+
+**Absence never means zero.** A `null` receipt means "no information" — a middleware predating the contract, a non-JSON body, a response the page unloaded before reading, or any of the checks above failing. It must never be read as "nothing was ingested". Batches flushed via `navigator.sendBeacon` (page hidden, `pagehide`/`beforeunload`, and `{ critical: true }` events) expose no response body at all, so they never produce a receipt by construction.
 
 ---
 
