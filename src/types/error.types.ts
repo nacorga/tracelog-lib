@@ -2,6 +2,8 @@
  * Custom error types for TraceLog
  */
 
+import type { IngestionReceipt } from './ingestion-receipt.types';
+
 /**
  * Represents a permanent HTTP error (4xx) that should not be retried
  * Examples: 400 Bad Request, 403 Forbidden, 404 Not Found
@@ -11,6 +13,7 @@ export class PermanentError extends Error {
     message: string,
     public readonly statusCode?: number,
     public readonly responseCode?: string,
+    public readonly ingestionReceipt?: IngestionReceipt,
   ) {
     super(message);
     this.name = 'PermanentError';
