@@ -728,9 +728,10 @@ export class SenderManager extends StateManager {
    * against the caller's intent. `filtered` is the project's own sampling or exclusions working
    * exactly as configured, so keying on it would emit on every batch of a healthy project.
    *
-   * `debug` is deliberate per the logging policy. A refusal is a server-side account, quota, or
-   * guardrail decision that a visitor to the merchant's site can do nothing about and must never
-   * see; the integrating developer reads it in development or with `?tlog_mode=qa`.
+   * `debug` with no `visibility` is deliberate per the logging policy. A refusal is a server-side
+   * account, quota, or guardrail decision that a visitor to the merchant's site can do nothing
+   * about and must never see, so this stays development-only — production is silent even under
+   * `?tlog_mode=qa`, which is reserved for custom-event verification.
    */
   private noteReceipt(receipt: IngestionReceipt | null): IngestionReceipt | null {
     if (receipt && receipt.dropped > 0) {
