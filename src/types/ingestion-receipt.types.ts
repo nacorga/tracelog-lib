@@ -5,10 +5,22 @@ export type IngestionOutcome = 'accepted' | 'partial' | 'rejected';
  * here is not rejected loudly, it degrades to `undefined` in {@link parseIngestionReceipt}, so the
  * refusal arrives with no explanation at all.
  *
+ * Upstream, each value has exactly one writer, and the test for whether two refusals may share one
+ * is whether a merchant reading the resulting copy would be told the truth. `project_capacity` is
+ * split from `project_paused` for precisely that reason: both stop collection for a project, but
+ * one is the owner's own doing and the other is the plan's capacity, and the surfaces that render a
+ * coverage gap receive only this reason — no code, no message — so a shared value would state the
+ * wrong cause and offer the wrong remedy as fact.
+ *
  * There is deliberately no `account_closed`: closing an account marks its projects `deleting`
  * first, and that is refused upstream as a 404 long before ingestion decides anything.
  */
-export type IngestionRejectionReason = 'session_band' | 'event_guardrail' | 'project_paused' | 'account_paused';
+export type IngestionRejectionReason =
+  | 'session_band'
+  | 'event_guardrail'
+  | 'project_paused'
+  | 'project_capacity'
+  | 'account_paused';
 
 /**
  * What the server did with a submitted batch. Every event lands in exactly one counter, so a
@@ -41,6 +53,7 @@ export const INGESTION_REJECTION_REASONS: readonly IngestionRejectionReason[] = 
   'session_band',
   'event_guardrail',
   'project_paused',
+  'project_capacity',
   'account_paused',
 ];
 

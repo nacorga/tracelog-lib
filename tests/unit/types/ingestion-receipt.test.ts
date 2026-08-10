@@ -134,11 +134,15 @@ describe('parseIngestionReceipt', () => {
     ).toMatchObject({ reason });
   });
 
+  // Four packages, one vocabulary. `project_capacity` is distinct from `project_paused` on purpose:
+  // the coverage surfaces receive only this reason, so collapsing the two would tell a merchant
+  // blocked by plan capacity that they paused the project themselves.
   it('pins the reason set to the api/middleware contract', () => {
     expect([...INGESTION_REJECTION_REASONS]).toEqual([
       'session_band',
       'event_guardrail',
       'project_paused',
+      'project_capacity',
       'account_paused',
     ]);
   });

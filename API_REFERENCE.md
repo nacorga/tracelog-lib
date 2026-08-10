@@ -1039,7 +1039,7 @@ interface IngestionReceipt {
   duplicates: number;
   filtered: number;
   dropped: number;
-  reason?: 'session_band' | 'event_guardrail' | 'project_paused' | 'account_paused';
+  reason?: 'session_band' | 'event_guardrail' | 'project_paused' | 'project_capacity' | 'account_paused';
   retryAt?: string;
   coverage: 'complete' | 'partial';
 }
