@@ -1,7 +1,7 @@
-const _n = 9e5;
-const yn = 120, In = 49152, wn = 100, An = 500, Ln = 200;
-const bn = 1e3, Mn = 500, Cn = 1e3;
-const L = "data-tlog", vt = [
+const Ln = 9e5;
+const Mn = 120, Rn = 49152, Cn = 100, Nn = 500, On = 200;
+const Pn = 1e3, kn = 500, Dn = 1e3;
+const b = "data-tlog", yt = [
   "button",
   "a",
   'input[type="button"]',
@@ -33,7 +33,7 @@ const L = "data-tlog", vt = [
   ".menu-item",
   "[data-testid]",
   '[tabindex="0"]'
-], Tt = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"], _t = [
+], It = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"], wt = [
   "token",
   "auth",
   "key",
@@ -65,73 +65,74 @@ const y = {
   INVALID_CLICK_THROTTLE: "Click throttle must be a non-negative number",
   INVALID_MAX_SAME_EVENT_PER_MINUTE: "Max same event per minute must be a positive number",
   INVALID_SEND_INTERVAL: "Send interval must be between 1000ms (1 second) and 60000ms (60 seconds)"
-}, yt = [
+}, At = [
   /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
   /javascript:/gi,
   /on\w+\s*=/gi,
   /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi,
   /<embed\b[^>]*>/gi,
   /<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi
-], g = "tlog", Y = `${g}:qa_mode`, Ee = `${g}:uid`, nt = "tlog_mode", Ue = "qa", Fe = "qa_off", le = (n) => n ? `${g}:${n}:queue` : `${g}:queue`, ue = (n) => n ? `${g}:${n}:rate_limit` : `${g}:rate_limit`, It = (n, e) => `${g}:beacon:${n}:${e}`, wt = (n) => n ? `${g}:${n}:session` : `${g}:session`, At = (n) => n ? `${g}:${n}:broadcast` : `${g}:broadcast`, Ve = (n, e) => `${g}:${n}:session_counts:${e}`, He = 10080 * 60 * 1e3, xe = `${g}:session_counts_last_cleanup`, Be = 3600 * 1e3, de = (n) => n ? `${g}:${n}:identity` : `${g}:identity`, P = `${g}:pending_identity`;
-var M = /* @__PURE__ */ ((n) => (n.Localhost = "localhost:8080", n.Fail = "localhost:9999", n))(M || {}), w = /* @__PURE__ */ ((n) => (n.Mobile = "mobile", n.Tablet = "tablet", n.Desktop = "desktop", n.Unknown = "unknown", n))(w || {}), V = /* @__PURE__ */ ((n) => (n.EVENT = "event", n.QUEUE = "queue", n))(V || {});
+], g = "tlog", q = `${g}:qa_mode`, ve = `${g}:uid`, it = "tlog_mode", Fe = "qa", Ve = "qa_off", ue = (n) => n ? `${g}:${n}:queue` : `${g}:queue`, de = (n) => n ? `${g}:${n}:rate_limit` : `${g}:rate_limit`, bt = (n, e) => `${g}:beacon:${n}:${e}`, Lt = (n) => n ? `${g}:${n}:session` : `${g}:session`, Mt = (n) => n ? `${g}:${n}:broadcast` : `${g}:broadcast`, He = (n, e) => `${g}:${n}:session_counts:${e}`, xe = 10080 * 60 * 1e3, Be = `${g}:session_counts_last_cleanup`, $e = 3600 * 1e3, he = (n) => n ? `${g}:${n}:identity` : `${g}:identity`, k = `${g}:pending_identity`;
+var R = /* @__PURE__ */ ((n) => (n.Localhost = "localhost:8080", n.Fail = "localhost:9999", n))(R || {}), w = /* @__PURE__ */ ((n) => (n.Mobile = "mobile", n.Tablet = "tablet", n.Desktop = "desktop", n.Unknown = "unknown", n))(w || {}), H = /* @__PURE__ */ ((n) => (n.EVENT = "event", n.QUEUE = "queue", n))(H || {});
 class C extends Error {
-  constructor(e, t, s) {
-    super(e), this.statusCode = t, this.responseCode = s, this.name = "PermanentError", Error.captureStackTrace && Error.captureStackTrace(this, C);
+  constructor(e, t, s, r) {
+    super(e), this.statusCode = t, this.responseCode = s, this.ingestionReceipt = r, this.name = "PermanentError", Error.captureStackTrace && Error.captureStackTrace(this, C);
   }
   statusCode;
   responseCode;
-}
-class Z extends Error {
-  constructor(e) {
-    super(e), this.name = "RateLimitError", Error.captureStackTrace && Error.captureStackTrace(this, Z);
-  }
+  ingestionReceipt;
 }
 class ee extends Error {
   constructor(e) {
-    super(e), this.name = "TimeoutError", Error.captureStackTrace && Error.captureStackTrace(this, ee);
+    super(e), this.name = "RateLimitError", Error.captureStackTrace && Error.captureStackTrace(this, ee);
   }
 }
-var d = /* @__PURE__ */ ((n) => (n.PAGE_VIEW = "page_view", n.CLICK = "click", n.SCROLL = "scroll", n.SESSION_START = "session_start", n.CUSTOM = "custom", n.WEB_VITALS = "web_vitals", n.ERROR = "error", n))(d || {}), ve = /* @__PURE__ */ ((n) => (n.UP = "up", n.DOWN = "down", n))(ve || {}), x = /* @__PURE__ */ ((n) => (n.JS_ERROR = "js_error", n.PROMISE_REJECTION = "promise_rejection", n))(x || {}), te = /* @__PURE__ */ ((n) => (n.QA = "qa", n))(te || {});
-class j extends Error {
+class te extends Error {
+  constructor(e) {
+    super(e), this.name = "TimeoutError", Error.captureStackTrace && Error.captureStackTrace(this, te);
+  }
+}
+var d = /* @__PURE__ */ ((n) => (n.PAGE_VIEW = "page_view", n.CLICK = "click", n.SCROLL = "scroll", n.SESSION_START = "session_start", n.CUSTOM = "custom", n.WEB_VITALS = "web_vitals", n.ERROR = "error", n))(d || {}), Te = /* @__PURE__ */ ((n) => (n.UP = "up", n.DOWN = "down", n))(Te || {}), B = /* @__PURE__ */ ((n) => (n.JS_ERROR = "js_error", n.PROMISE_REJECTION = "promise_rejection", n))(B || {}), se = /* @__PURE__ */ ((n) => (n.QA = "qa", n))(se || {});
+class X extends Error {
   constructor(e, t, s) {
     super(e), this.errorCode = t, this.layer = s, this.name = this.constructor.name, Error.captureStackTrace && Error.captureStackTrace(this, this.constructor);
   }
   errorCode;
   layer;
 }
-class m extends j {
+class m extends X {
   constructor(e, t = "config") {
     super(e, "APP_CONFIG_INVALID", t);
   }
 }
-class Lt extends j {
+class Rt extends X {
   constructor(e, t = "config") {
     super(e, "SESSION_TIMEOUT_INVALID", t);
   }
 }
-class $e extends j {
+class je extends X {
   constructor(e, t = "config") {
     super(e, "SAMPLING_RATE_INVALID", t);
   }
 }
-class je extends j {
+class Xe extends X {
   constructor(e, t = "config") {
     super(e, "INTEGRATION_INVALID", t);
   }
 }
-class Nn extends j {
+class Un extends X {
   constructor(e, t, s = "runtime") {
     super(e, "INITIALIZATION_TIMEOUT", s), this.timeoutMs = t;
   }
   timeoutMs;
 }
-const bt = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"], he = () => {
+const Ct = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"], fe = () => {
   const n = new URLSearchParams(window.location.search), e = {};
-  return bt.forEach((s) => {
+  return Ct.forEach((s) => {
     const r = n.get(s);
     r && (e[s] = r);
   }), Object.keys(e).length ? e : void 0;
-}, Mt = "https://ingest.tracelog.io", Ct = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", Nt = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", Rt = "background: #d32f2f; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", Ot = (n, e) => {
+}, Nt = "https://ingest.tracelog.io", Ot = "background: #ff9800; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", Pt = "background: #9e9e9e; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", kt = "background: #d32f2f; color: white; font-weight: bold; padding: 2px 8px; border-radius: 3px;", Dt = (n, e) => {
   if (e) {
     if (e instanceof Error) {
       const t = e.message.replace(/\s+at\s+.*$/gm, "").replace(/\s*\([^()]+:\d+:\d+\)/g, "");
@@ -150,24 +151,24 @@ const bt = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"], he = () => {
     return `[TraceLog] ${n}: ${String(e)}`;
   }
   return `[TraceLog] ${n}`;
-}, Pt = () => {
+}, Ut = () => {
   if (typeof window > "u" || typeof sessionStorage > "u")
     return !1;
   try {
-    return sessionStorage.getItem(Y) === "true";
+    return sessionStorage.getItem(q) === "true";
   } catch {
     return !1;
   }
 }, a = (n, e, t) => {
-  const { error: s, data: r, showToClient: i = !1, style: o, visibility: c } = t ?? {}, l = s ? Ot(e, s) : `[TraceLog] ${e}`, u = n === "error" ? "error" : n === "warn" ? "warn" : "log";
-  if (!kt(c, i))
+  const { error: s, data: r, showToClient: i = !1, style: o, visibility: c } = t ?? {}, l = s ? Dt(e, s) : `[TraceLog] ${e}`, u = n === "error" ? "error" : n === "warn" ? "warn" : "log";
+  if (!Ft(c, i))
     return;
-  const p = Dt(c, o), S = r !== void 0 ? Te(r) : void 0;
-  Ut(u, l, p, S);
-}, kt = (n, e) => n === "critical" ? !0 : n === "qa" || e ? Pt() : !1, Dt = (n, e) => e !== void 0 && e !== "" ? e : n === "critical" ? Rt : "", Ut = (n, e, t, s) => {
+  const p = Vt(c, o), S = r !== void 0 ? _e(r) : void 0;
+  Ht(u, l, p, S);
+}, Ft = (n, e) => n === "critical" ? !0 : n === "qa" || e ? Ut() : !1, Vt = (n, e) => e !== void 0 && e !== "" ? e : n === "critical" ? kt : "", Ht = (n, e, t, s) => {
   const r = t !== void 0 && t !== "", i = r ? `%c${e}` : e;
   s !== void 0 ? r ? console[n](i, t, s) : console[n](i, s) : r ? console[n](i, t) : console[n](i);
-}, Te = (n) => {
+}, _e = (n) => {
   const e = {}, t = ["token", "password", "secret", "key", "apikey", "api_key", "sessionid", "session_id"];
   for (const [s, r] of Object.entries(n)) {
     const i = s.toLowerCase();
@@ -175,16 +176,16 @@ const bt = ["gclid", "gbraid", "wbraid", "fbclid", "ttclid"], he = () => {
       e[s] = "[REDACTED]";
       continue;
     }
-    r !== null && typeof r == "object" && !Array.isArray(r) ? e[s] = Te(r) : Array.isArray(r) ? e[s] = r.map(
-      (o) => o !== null && typeof o == "object" && !Array.isArray(o) ? Te(o) : o
+    r !== null && typeof r == "object" && !Array.isArray(r) ? e[s] = _e(r) : Array.isArray(r) ? e[s] = r.map(
+      (o) => o !== null && typeof o == "object" && !Array.isArray(o) ? _e(o) : o
     ) : e[s] = r;
   }
   return e;
 };
-let _e, rt;
-const Ft = () => {
-  typeof window < "u" && !_e && (_e = window.matchMedia("(pointer: coarse)"), rt = window.matchMedia("(hover: none)"));
-}, se = "Unknown", Vt = (n) => {
+let ye, ot;
+const xt = () => {
+  typeof window < "u" && !ye && (ye = window.matchMedia("(pointer: coarse)"), ot = window.matchMedia("(hover: none)"));
+}, ne = "Unknown", Bt = (n) => {
   const e = n.userAgentData?.platform;
   if (e != null && e !== "") {
     if (/windows/i.test(e)) return "Windows";
@@ -195,8 +196,8 @@ const Ft = () => {
     if (/ios/i.test(e)) return "iOS";
   }
   const t = navigator.userAgent;
-  return /Windows/i.test(t) ? "Windows" : /iPhone|iPad|iPod/i.test(t) ? "iOS" : /Mac OS X|Macintosh/i.test(t) ? "macOS" : /Android/i.test(t) ? "Android" : /CrOS/i.test(t) ? "ChromeOS" : /Linux/i.test(t) ? "Linux" : se;
-}, Ht = (n) => {
+  return /Windows/i.test(t) ? "Windows" : /iPhone|iPad|iPod/i.test(t) ? "iOS" : /Mac OS X|Macintosh/i.test(t) ? "macOS" : /Android/i.test(t) ? "Android" : /CrOS/i.test(t) ? "ChromeOS" : /Linux/i.test(t) ? "Linux" : ne;
+}, $t = (n) => {
   const e = n.userAgentData?.brands;
   if (e != null && e.length > 0) {
     const r = e.filter((i) => !/not.?a.?brand|chromium/i.test(i.brand))[0];
@@ -206,101 +207,101 @@ const Ft = () => {
     }
   }
   const t = navigator.userAgent;
-  return /Edg\//i.test(t) ? "Edge" : /OPR\//i.test(t) ? "Opera" : /Chrome/i.test(t) ? "Chrome" : /Firefox/i.test(t) ? "Firefox" : /Safari/i.test(t) && !/Chrome/i.test(t) ? "Safari" : se;
-}, xt = () => {
+  return /Edg\//i.test(t) ? "Edge" : /OPR\//i.test(t) ? "Opera" : /Chrome/i.test(t) ? "Chrome" : /Firefox/i.test(t) ? "Firefox" : /Safari/i.test(t) && !/Chrome/i.test(t) ? "Safari" : ne;
+}, jt = () => {
   try {
     const n = navigator;
     if (n.userAgentData != null && typeof n.userAgentData.mobile == "boolean") {
       const l = n.userAgentData.platform;
       return l != null && l !== "" && /ipad|tablet/i.test(l) ? w.Tablet : n.userAgentData.mobile ? w.Mobile : w.Desktop;
     }
-    Ft();
-    const e = window.innerWidth, t = _e?.matches ?? !1, s = rt?.matches ?? !1, r = "ontouchstart" in window || navigator.maxTouchPoints > 0, i = navigator.userAgent.toLowerCase(), o = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(i), c = /tablet|ipad|android(?!.*mobile)/.test(i);
+    xt();
+    const e = window.innerWidth, t = ye?.matches ?? !1, s = ot?.matches ?? !1, r = "ontouchstart" in window || navigator.maxTouchPoints > 0, i = navigator.userAgent.toLowerCase(), o = /mobile|android|iphone|ipod|blackberry|iemobile|opera mini/.test(i), c = /tablet|ipad|android(?!.*mobile)/.test(i);
     return e <= 767 || o && r ? w.Mobile : e >= 768 && e <= 1024 || c || t && s && r ? w.Tablet : w.Desktop;
   } catch (n) {
     return a("debug", "Device detection failed, defaulting to desktop", { error: n }), w.Desktop;
   }
-}, Bt = () => {
+}, Xt = () => {
   try {
     const n = navigator;
     return {
-      type: xt(),
-      os: Vt(n),
-      browser: Ht(n)
+      type: jt(),
+      os: Bt(n),
+      browser: $t(n)
     };
   } catch (n) {
     return a("debug", "Device info detection failed, using defaults", { error: n }), {
       type: w.Desktop,
-      os: se,
-      browser: se
+      os: ne,
+      browser: ne
     };
   }
-}, Xe = 500, Ge = 2e3, We = 5e3, q = 50, $t = q * 2, it = 1, jt = 1e3, Xt = 10, Ke = 5e3, Gt = 3, Wt = 200, Kt = 6e4, zt = 64, Qt = 10 * 6e4, Yt = 200, Rn = {
+}, Ge = 500, We = 2e3, Ke = 5e3, J = 50, Gt = J * 2, at = 1, Wt = 1e3, Kt = 10, ze = 5e3, zt = 3, Qt = 200, Yt = 6e4, qt = 64, Jt = 10 * 6e4, Zt = 200, Fn = {
   LCP: 2500,
   FCP: 1800,
   CLS: 0.1,
   INP: 200,
   TTFB: 800
-}, qt = {
+}, es = {
   LCP: 2500,
   FCP: 1800,
   CLS: 0.1,
   INP: 200,
   TTFB: 800
-}, Jt = {
+}, ts = {
   LCP: 4e3,
   FCP: 3e3,
   CLS: 0.25,
   INP: 500,
   TTFB: 1800
-}, ze = {
+}, Qe = {
   LCP: Number.NEGATIVE_INFINITY,
   FCP: Number.NEGATIVE_INFINITY,
   CLS: Number.NEGATIVE_INFINITY,
   INP: Number.NEGATIVE_INFINITY,
   TTFB: Number.NEGATIVE_INFINITY
-}, ye = "all", Qe = (n = ye) => {
+}, Ie = "all", Ye = (n = Ie) => {
   switch (n) {
     case "all":
-      return ze;
+      return Qe;
     case "needs-improvement":
-      return qt;
+      return es;
     case "poor":
-      return Jt;
+      return ts;
     default:
-      return ze;
+      return Qe;
   }
-}, Zt = 50, es = "3.4.1", ts = es, ss = () => typeof window < "u" && typeof sessionStorage < "u", ns = () => {
+}, ss = 50, ns = "3.4.1", rs = ns, is = () => typeof window < "u" && typeof sessionStorage < "u", os = () => {
   try {
     const n = new URLSearchParams(window.location.search);
-    n.delete(nt);
+    n.delete(it);
     const e = n.toString(), t = window.location.pathname + (e ? "?" + e : "") + window.location.hash;
     window.history.replaceState({}, "", t);
   } catch {
   }
-}, rs = () => {
-  if (!ss())
+}, as = () => {
+  if (!is())
     return !1;
   try {
-    const e = new URLSearchParams(window.location.search).get(nt), t = sessionStorage.getItem(Y);
+    const e = new URLSearchParams(window.location.search).get(it), t = sessionStorage.getItem(q);
     let s = null;
-    return e === Ue ? (s = !0, sessionStorage.setItem(Y, "true"), a("info", "QA Mode ACTIVE", {
+    return e === Fe ? (s = !0, sessionStorage.setItem(q, "true"), a("info", "QA Mode ACTIVE", {
       visibility: "qa",
-      style: Ct
-    })) : e === Fe && (s = !1, sessionStorage.setItem(Y, "false"), a("info", "QA Mode DISABLED", {
+      style: Ot
+    })) : e === Ve && (s = !1, sessionStorage.setItem(q, "false"), a("info", "QA Mode DISABLED", {
       visibility: "qa",
-      style: Nt
-    })), (e === Ue || e === Fe) && ns(), s ?? t === "true";
+      style: Pt
+    })), (e === Fe || e === Ve) && os(), s ?? t === "true";
   } catch {
     return !1;
   }
-}, ot = () => typeof document < "u" && document.prerendering === !0, is = (n) => {
+}, ct = () => typeof document < "u" && document.prerendering === !0, cs = (n) => {
   try {
     return new URL(n).protocol === "https:";
   } catch {
     return !1;
   }
-}, os = (n) => `${Mt}/p/${encodeURIComponent(n)}/collect`, as = (n) => {
+}, ls = (n) => `${Nt}/p/${encodeURIComponent(n)}/collect`, us = (n) => {
   try {
     const t = new URL(window.location.href).hostname;
     if (!t || typeof t != "string")
@@ -318,7 +319,7 @@ const Ft = () => {
     if (!r || r.split(".").length < 2)
       throw new Error("Invalid domain structure for SaaS");
     const i = `https://${n}.${r}/collect`;
-    if (!is(i))
+    if (!cs(i))
       throw new Error("Generated URL failed validation");
     return i;
   } catch (e) {
@@ -326,10 +327,10 @@ const Ft = () => {
       cause: e
     });
   }
-}, cs = (n) => {
+}, ds = (n) => {
   const e = {}, t = n.integrations?.tracelog;
-  return t?.projectId && (e.saas = t.firstParty ? as(t.projectId) : os(t.projectId)), e;
-}, D = (n, e = []) => {
+  return t?.projectId && (e.saas = t.firstParty ? us(t.projectId) : ls(t.projectId)), e;
+}, U = (n, e = []) => {
   if (!n || typeof n != "string")
     return a("warn", "Invalid URL provided to normalizeUrl", { data: { type: typeof n } }), n || "";
   try {
@@ -340,7 +341,7 @@ const Ft = () => {
       const c = window.location.href;
       t = new URL(n, c), s = t.origin === new URL(c).origin;
     }
-    const r = t.searchParams, i = [.../* @__PURE__ */ new Set([..._t, ...e])];
+    const r = t.searchParams, i = [.../* @__PURE__ */ new Set([...wt, ...e])];
     let o = !1;
     for (const c of i)
       r.has(c) && (r.delete(c), o = !0);
@@ -348,7 +349,7 @@ const Ft = () => {
   } catch (t) {
     return a("warn", "URL normalization failed, returning original", { error: t, data: { urlLength: n?.length } }), n;
   }
-}, ls = [
+}, hs = [
   "co.uk",
   "org.uk",
   "com.au",
@@ -360,40 +361,40 @@ const Ft = () => {
   "co.in",
   "com.cn",
   "co.za"
-], Ye = (n) => {
+], qe = (n) => {
   const e = n.toLowerCase().split(".");
   if (e.length <= 2)
     return n.toLowerCase();
   const t = e.slice(-2).join(".");
-  return ls.includes(t) ? e.slice(-3).join(".") : e.slice(-2).join(".");
-}, us = (n, e) => n === e ? !0 : Ye(n) === Ye(e), fe = (n = []) => {
+  return hs.includes(t) ? e.slice(-3).join(".") : e.slice(-2).join(".");
+}, fs = (n, e) => n === e ? !0 : qe(n) === qe(e), ge = (n = []) => {
   const e = document.referrer;
   if (!e)
     return "Direct";
   try {
     const t = new URL(e).hostname.toLowerCase(), s = window.location.hostname.toLowerCase();
-    return us(t, s) ? "Direct" : D(e, n);
+    return fs(t, s) ? "Direct" : U(e, n);
   } catch (t) {
     return a("debug", "Failed to parse referrer URL, using raw value", { error: t, data: { referrer: e } }), e;
   }
-}, ge = () => {
+}, me = () => {
   const n = new URLSearchParams(window.location.search), e = {};
-  return Tt.forEach((s) => {
+  return It.forEach((s) => {
     const r = n.get(s);
     if (r) {
       const i = s.split("utm_")[1];
       e[i] = r;
     }
   }), Object.keys(e).length ? e : void 0;
-}, at = () => typeof crypto < "u" && crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (n) => {
+}, lt = () => typeof crypto < "u" && crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (n) => {
   const e = Math.random() * 16 | 0;
   return (n === "x" ? e : e & 3 | 8).toString(16);
 });
-let K = 0, z = 0;
-const ds = () => {
+let z = 0, Q = 0;
+const gs = () => {
   let n = Date.now();
-  n < z && (n = z), n === z ? K = (K + 1) % 1e3 : K = 0, z = n;
-  const e = K.toString().padStart(3, "0");
+  n < Q && (n = Q), n === Q ? z = (z + 1) % 1e3 : z = 0, Q = n;
+  const e = z.toString().padStart(3, "0");
   let t = "";
   try {
     if (typeof crypto < "u" && crypto.getRandomValues) {
@@ -403,13 +404,13 @@ const ds = () => {
   } catch {
   }
   return t || (t = Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0")), `${n}-${e}-${t}`;
-}, qe = (n) => {
+}, Je = (n) => {
   if (!n || typeof n != "string" || n.trim().length === 0)
     return "";
   let e = n;
   n.length > 1e3 && (e = n.slice(0, Math.max(0, 1e3)));
   let t = 0;
-  for (const r of yt) {
+  for (const r of At) {
     const i = e;
     e = e.replace(r, ""), i !== e && t++;
   }
@@ -419,11 +420,11 @@ const ds = () => {
       valueLength: n.length
     }
   }), e.trim();
-}, Ie = (n, e = 0) => {
+}, we = (n, e = 0) => {
   if (n == null)
     return null;
   if (typeof n == "string")
-    return qe(n);
+    return Je(n);
   if (typeof n == "number")
     return !Number.isFinite(n) || n < -Number.MAX_SAFE_INTEGER || n > Number.MAX_SAFE_INTEGER ? 0 : n;
   if (typeof n == "boolean")
@@ -431,30 +432,30 @@ const ds = () => {
   if (e > 10)
     return null;
   if (Array.isArray(n))
-    return n.slice(0, 1e3).map((r) => Ie(r, e + 1)).filter((r) => r !== null);
+    return n.slice(0, 1e3).map((r) => we(r, e + 1)).filter((r) => r !== null);
   if (typeof n == "object") {
     const t = {}, r = Object.entries(n).slice(0, 200);
     for (const [i, o] of r) {
-      const c = qe(i);
+      const c = Je(i);
       if (c) {
-        const l = Ie(o, e + 1);
+        const l = we(o, e + 1);
         l !== null && (t[c] = l);
       }
     }
     return t;
   }
   return null;
-}, hs = (n) => {
+}, ms = (n) => {
   if (typeof n != "object" || n === null)
     return {};
   try {
-    const e = Ie(n);
+    const e = we(n);
     return typeof e == "object" && e !== null ? e : {};
   } catch (e) {
     const t = e instanceof Error ? e.message : String(e);
     throw new Error(`[TraceLog] Metadata sanitization failed: ${t}`, { cause: e });
   }
-}, fs = [
+}, ps = [
   // Email addresses.
   // Quantifiers are bounded (local part ≤64, each label ≤63, TLD ≤63 per RFC/DNS limits)
   // and the domain is matched as discrete dot-separated labels so the local-part and
@@ -475,20 +476,20 @@ const ds = () => {
   /:\/\/[^:/]+:([^@]+)@/gi,
   // Sensitive URL query parameters (token=, password=, auth=, secret=, api_key=, …)
   /[?&](token|password|passwd|auth|secret|secret_key|private_key|auth_key|api_key|apikey|access_token)=[^&\s]+/gi
-], U = (n) => {
+], F = (n) => {
   let e = n;
-  for (const t of fs)
+  for (const t of ps)
     e = e.replace(t, "[REDACTED]");
   return e;
-}, gs = (n) => {
+}, Ss = (n) => {
   if (n !== void 0 && (n === null || typeof n != "object"))
     throw new m("Configuration must be an object", "config");
   if (n) {
     if (n.sessionTimeout !== void 0 && (typeof n.sessionTimeout != "number" || n.sessionTimeout < 3e4 || n.sessionTimeout > 864e5))
-      throw new Lt(y.INVALID_SESSION_TIMEOUT, "config");
+      throw new Rt(y.INVALID_SESSION_TIMEOUT, "config");
     if (n.globalMetadata !== void 0 && (typeof n.globalMetadata != "object" || n.globalMetadata === null))
       throw new m(y.INVALID_GLOBAL_METADATA, "config");
-    if (n.integrations && ms(n.integrations), n.sensitiveQueryParams !== void 0) {
+    if (n.integrations && Es(n.integrations), n.sensitiveQueryParams !== void 0) {
       if (!Array.isArray(n.sensitiveQueryParams))
         throw new m(y.INVALID_SENSITIVE_QUERY_PARAMS, "config");
       for (const e of n.sensitiveQueryParams)
@@ -496,9 +497,9 @@ const ds = () => {
           throw new m("All sensitive query params must be strings", "config");
     }
     if (n.errorSampling !== void 0 && (typeof n.errorSampling != "number" || n.errorSampling < 0 || n.errorSampling > 1))
-      throw new $e(y.INVALID_ERROR_SAMPLING_RATE, "config");
+      throw new je(y.INVALID_ERROR_SAMPLING_RATE, "config");
     if (n.samplingRate !== void 0 && (typeof n.samplingRate != "number" || n.samplingRate < 0 || n.samplingRate > 1))
-      throw new $e(y.INVALID_SAMPLING_RATE, "config");
+      throw new je(y.INVALID_SAMPLING_RATE, "config");
     if (n.pageViewThrottleMs !== void 0 && (typeof n.pageViewThrottleMs != "number" || n.pageViewThrottleMs < 0))
       throw new m(y.INVALID_PAGE_VIEW_THROTTLE, "config");
     if (n.clickThrottleMs !== void 0 && (typeof n.clickThrottleMs != "number" || n.clickThrottleMs < 0))
@@ -548,19 +549,19 @@ const ds = () => {
       }
     }
   }
-}, ms = (n) => {
+}, Es = (n) => {
   if (n && n.tracelog) {
     if (!n.tracelog.projectId || typeof n.tracelog.projectId != "string" || n.tracelog.projectId.trim() === "")
-      throw new je(y.INVALID_TRACELOG_PROJECT_ID, "config");
+      throw new Xe(y.INVALID_TRACELOG_PROJECT_ID, "config");
     if (n.tracelog.shopify !== void 0 && typeof n.tracelog.shopify != "boolean")
-      throw new je("tracelog.shopify must be a boolean", "config");
+      throw new Xe("tracelog.shopify must be a boolean", "config");
   }
-}, ps = (n) => (gs(n), {
+}, vs = (n) => (Ss(n), {
   ...n ?? {},
   sessionTimeout: n?.sessionTimeout ?? 9e5,
   globalMetadata: n?.globalMetadata ?? {},
   sensitiveQueryParams: n?.sensitiveQueryParams ?? [],
-  errorSampling: n?.errorSampling ?? it,
+  errorSampling: n?.errorSampling ?? at,
   samplingRate: n?.samplingRate ?? 1,
   pageViewThrottleMs: n?.pageViewThrottleMs ?? 1e3,
   clickThrottleMs: n?.clickThrottleMs ?? 300,
@@ -568,18 +569,18 @@ const ds = () => {
   sendIntervalMs: n?.sendIntervalMs ?? 1e4,
   flushOnSpaNavigation: n?.flushOnSpaNavigation ?? !1,
   flushOnPageHidden: n?.flushOnPageHidden ?? !0
-}), we = (n, e = /* @__PURE__ */ new Set()) => {
+}), Ae = (n, e = /* @__PURE__ */ new Set()) => {
   if (n == null)
     return !0;
   const t = typeof n;
-  return t === "string" || t === "number" || t === "boolean" ? !0 : t === "function" || t === "symbol" || t === "bigint" || e.has(n) ? !1 : (e.add(n), Array.isArray(n) ? n.every((s) => we(s, e)) : t === "object" ? Object.values(n).every((s) => we(s, e)) : !1);
-}, Ss = (n) => typeof n != "object" || n === null ? !1 : we(n), Ae = (n) => {
+  return t === "string" || t === "number" || t === "boolean" ? !0 : t === "function" || t === "symbol" || t === "bigint" || e.has(n) ? !1 : (e.add(n), Array.isArray(n) ? n.every((s) => Ae(s, e)) : t === "object" ? Object.values(n).every((s) => Ae(s, e)) : !1);
+}, Ts = (n) => typeof n != "object" || n === null ? !1 : Ae(n), be = (n) => {
   if (typeof n != "object" || n === null || Array.isArray(n)) return;
   const e = {};
   for (const [t, s] of Object.entries(n))
     typeof s == "string" && (e[t] = s);
   return Object.keys(e).length > 0 ? e : void 0;
-}, Es = (n) => typeof n != "string" ? {
+}, _s = (n) => typeof n != "string" ? {
   valid: !1,
   error: "Event name must be a string"
 } : n.length === 0 ? {
@@ -594,9 +595,9 @@ const ds = () => {
 } : ["constructor", "prototype", "__proto__", "eval", "function", "var", "let", "const"].includes(n.toLowerCase()) ? {
   valid: !1,
   error: "Event name cannot be a reserved word"
-} : { valid: !0 }, Je = (n, e, t) => {
-  const s = hs(e), r = `${t} "${n}" metadata error`;
-  if (!Ss(s))
+} : { valid: !0 }, Ze = (n, e, t) => {
+  const s = ms(e), r = `${t} "${n}" metadata error`;
+  if (!Ts(s))
     return {
       valid: !1,
       error: `${r}: object has invalid types. Valid types are string, number, boolean or string arrays.`
@@ -644,7 +645,7 @@ const ds = () => {
     valid: !0,
     sanitizedMetadata: s
   };
-}, vs = (n, e, t) => {
+}, ys = (n, e, t) => {
   if (Array.isArray(e)) {
     const s = [], r = `${t} "${n}" metadata error`;
     for (let i = 0; i < e.length; i++) {
@@ -654,7 +655,7 @@ const ds = () => {
           valid: !1,
           error: `${r}: array item at index ${i} must be an object.`
         };
-      const c = Je(n, o, t);
+      const c = Ze(n, o, t);
       if (!c.valid)
         return {
           valid: !1,
@@ -667,16 +668,16 @@ const ds = () => {
       sanitizedMetadata: s
     };
   }
-  return Je(n, e, t);
-}, Ts = (n, e) => {
-  const t = Es(n);
+  return Ze(n, e, t);
+}, Is = (n, e) => {
+  const t = _s(n);
   if (!t.valid)
     return a("error", "Event name validation failed", {
       data: { eventName: n, error: t.error }
     }), t;
   if (!e)
     return { valid: !0 };
-  const s = vs(n, e, "customEvent");
+  const s = ys(n, e, "customEvent");
   return s.valid || a("error", "Event metadata validation failed", {
     data: {
       eventName: n,
@@ -684,7 +685,7 @@ const ds = () => {
     }
   }), s;
 };
-class _s {
+class ws {
   listeners = /* @__PURE__ */ new Map();
   /**
    * Subscribes to an event channel
@@ -801,16 +802,16 @@ class _s {
     this.listeners.clear();
   }
 }
-const ys = /https?:\/\/\S+/g, Is = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ws = /0x[0-9a-fA-F]{4,}/g, As = /(?<!\d)\d{4,}(?!\d)/g, Ls = /(['"])[^'"]{20,}\1/g;
-function bs(n) {
-  return n.replace(ys, "[URL]").replace(Is, "[ID]").replace(ws, "[ADDR]").replace(As, "[N]").replace(Ls, "$1[VAR]$1").toLowerCase().trim();
+const As = /https?:\/\/\S+/g, bs = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, Ls = /0x[0-9a-fA-F]{4,}/g, Ms = /(?<!\d)\d{4,}(?!\d)/g, Rs = /(['"])[^'"]{20,}\1/g;
+function Cs(n) {
+  return n.replace(As, "[URL]").replace(bs, "[ID]").replace(Ls, "[ADDR]").replace(Ms, "[N]").replace(Rs, "$1[VAR]$1").toLowerCase().trim();
 }
-function Ze(n) {
+function et(n) {
   const e = n.search(/[?#]/);
   return e === -1 ? n : n.slice(0, e);
 }
-function Ms(n, e) {
-  const t = Ze((n ?? "").trim());
+function Ns(n, e) {
+  const t = et((n ?? "").trim());
   if (!t) return "";
   let s;
   try {
@@ -819,39 +820,77 @@ function Ms(n, e) {
     return t;
   }
   if (s.protocol !== "http:" && s.protocol !== "https:") return "";
-  const r = Ze((e ?? "").trim());
+  const r = et((e ?? "").trim());
   return r && t === r ? s.origin : t;
 }
-function Cs(n) {
-  const e = bs(n.message), t = Ms(n.filename, n.page_url), s = n.line == null ? "" : String(n.line);
+function Os(n) {
+  const e = Cs(n.message), t = Ns(n.filename, n.page_url), s = n.line == null ? "" : String(n.line);
   return `${e}|${t}|${s}`;
 }
-const me = { config: {} };
+const Ps = [
+  "session_band",
+  "event_guardrail",
+  "project_paused",
+  "project_capacity",
+  "account_paused"
+];
+function ks(n) {
+  return Ps.includes(n);
+}
+function ut(n, e) {
+  return typeof n == "object" && n !== null && n.statusCode === e;
+}
+function Ds(n) {
+  if (typeof n != "object" || n === null) return null;
+  const e = n;
+  if (e.outcome !== "accepted" && e.outcome !== "partial" && e.outcome !== "rejected" || e.coverage !== "complete" && e.coverage !== "partial") return null;
+  const t = (l) => typeof l == "number" && Number.isInteger(l) && l >= 0 ? l : null, s = t(e.accepted), r = t(e.duplicates), i = t(e.dropped);
+  if (s === null || r === null || i === null) return null;
+  const o = e.filtered === void 0 ? 0 : t(e.filtered);
+  if (o === null) return null;
+  const c = ks(e.reason) ? e.reason : void 0;
+  return {
+    outcome: e.outcome,
+    accepted: s,
+    duplicates: r,
+    filtered: o,
+    dropped: i,
+    ...c ? { reason: c } : {},
+    ...typeof e.retryAt == "string" ? { retryAt: e.retryAt } : {},
+    coverage: e.coverage
+  };
+}
+function tt(n, e) {
+  if (!e.ok && !ut(n, e.status)) return null;
+  const t = Ds(n);
+  return !t || t.accepted + t.duplicates + t.filtered + t.dropped === 0 || !e.ok && t.dropped === 0 ? null : t;
+}
+const pe = { config: {} };
 class T {
   /**
    * Retrieves a value from global state.
    */
   get(e) {
-    return me[e];
+    return pe[e];
   }
   /**
    * Sets a value in global state.
    */
   set(e, t) {
-    me[e] = t;
+    pe[e] = t;
   }
   /**
    * Returns an immutable snapshot of the entire global state.
    */
   getState() {
-    return { ...me };
+    return { ...pe };
   }
 }
-const Ns = "UNKNOWN_PROJECT";
-function Rs(n) {
-  return typeof n == "string" && n.length > 0 && n.length <= zt;
+const M = Object.freeze({ ok: !1, receipt: null }), Us = "UNKNOWN_PROJECT";
+function Fs(n) {
+  return typeof n == "string" && n.length > 0 && n.length <= qt;
 }
-class Os extends T {
+class Vs extends T {
   storeManager;
   apiUrl;
   lastPermanentErrorLog = null;
@@ -903,7 +942,7 @@ class Os extends T {
    * cases so the migration is one-shot per browser.
    */
   migrateLegacyV2Keys() {
-    const e = this.get("userId") || "anonymous", t = `${le(e)}:saas`, s = `${le(e)}:custom`, r = `${ue(e)}:saas`, i = `${ue(e)}:custom`;
+    const e = this.get("userId") || "anonymous", t = `${ue(e)}:saas`, s = `${ue(e)}:custom`, r = `${de(e)}:saas`, i = `${de(e)}:custom`;
     try {
       const o = this.storeManager.getItem(t);
       if (o) {
@@ -949,11 +988,11 @@ class Os extends T {
   }
   getQueueStorageKey() {
     const e = this.get("userId") || "anonymous";
-    return le(e);
+    return ue(e);
   }
   getRateLimitStorageKey() {
     const e = this.get("userId") || "anonymous";
-    return ue(e);
+    return de(e);
   }
   getActiveRateLimitKey() {
     return this.rateLimitStorageKeyAtArm ?? this.getRateLimitStorageKey();
@@ -1021,7 +1060,7 @@ class Os extends T {
       const t = this.ensureBatchMetadata(e), s = this.getPersistedData(), r = typeof s?.recoveryFailures == "number" && Number.isFinite(s.recoveryFailures) ? s.recoveryFailures : 0;
       return this.persistEventsWithFailureCount(t, r, !0), !1;
     }
-    return this.apiUrl.includes(M.Fail) ? (a("warn", "Fail mode: simulating network failure (sync)", { data: { events: e.events.length } }), !1) : this.apiUrl.includes(M.Localhost) ? (a("debug", "Success mode: simulating successful send (sync)", { data: { events: e.events.length } }), !0) : this.sendQueueSyncInternal(e);
+    return this.apiUrl.includes(R.Fail) ? (a("warn", "Fail mode: simulating network failure (sync)", { data: { events: e.events.length } }), !1) : this.apiUrl.includes(R.Localhost) ? (a("debug", "Success mode: simulating successful send (sync)", { data: { events: e.events.length } }), !0) : this.sendQueueSyncInternal(e);
   }
   /**
    * Sends events asynchronously using `fetch()` with retry, circuit breaker, and 429 cooldown.
@@ -1030,10 +1069,10 @@ class Os extends T {
   async sendEventsQueue(e, t) {
     const s = this.ensureBatchMetadata(e);
     try {
-      const r = await this.send(s);
-      return r ? (this.clearPersistedEvents(), t?.onSuccess?.(s.events.length, s.events, s)) : (this.persistEvents(s), t?.onFailure?.()), r;
+      const { ok: r, receipt: i } = await this.send(s);
+      return r ? (this.clearPersistedEvents(), t?.onSuccess?.(s.events.length, s.events, s, i ?? void 0)) : (this.persistEvents(s), t?.onFailure?.(i ?? void 0)), r;
     } catch (r) {
-      return r instanceof C ? (this.logPermanentError("Permanent error, not retrying", r), this.clearPersistedEvents(), t?.onFailure?.(), !1) : (this.persistEvents(s), t?.onFailure?.(), !1);
+      return r instanceof C ? (this.logPermanentError("Permanent error, not retrying", r), this.clearPersistedEvents(), t?.onFailure?.(r.ingestionReceipt), !1) : (this.persistEvents(s), t?.onFailure?.(), !1);
     }
   }
   /**
@@ -1069,10 +1108,11 @@ class Os extends T {
         a("debug", "All persisted events exceeded the recovery age cutoff; discarding batch"), this.clearPersistedEvents();
         return;
       }
-      await this.send(t) ? (this.clearPersistedEvents(), e?.onSuccess?.(r.events.length, r.events, t)) : (this.persistEventsWithFailureCount(t, s + 1, !0), e?.onFailure?.());
+      const { ok: o, receipt: c } = await this.send(t);
+      o ? (this.clearPersistedEvents(), e?.onSuccess?.(r.events.length, r.events, t, c ?? void 0)) : (this.persistEventsWithFailureCount(t, s + 1, !0), e?.onFailure?.(c ?? void 0));
     } catch (r) {
       if (r instanceof C) {
-        this.logPermanentError("Permanent error during recovery, clearing persisted events", r), this.clearPersistedEvents(), e?.onFailure?.();
+        this.logPermanentError("Permanent error during recovery, clearing persisted events", r), this.clearPersistedEvents(), e?.onFailure?.(r.ingestionReceipt);
         return;
       }
       a("error", "Failed to recover persisted events", { error: r }), t && this.persistEventsWithFailureCount(t, s + 1, !0), e?.onFailure?.();
@@ -1092,17 +1132,17 @@ class Os extends T {
   }
   async send(e) {
     const t = this.ensureBatchMetadata(e, e._metadata?.idempotency_token);
-    if (this.apiUrl.includes(M.Fail))
-      return a("debug", "Fail mode: simulating network failure", { data: { events: t.events.length } }), !1;
-    if (this.apiUrl.includes(M.Localhost))
-      return a("debug", "Success mode: simulating successful send", { data: { events: t.events.length } }), !0;
+    if (this.apiUrl.includes(R.Fail))
+      return a("debug", "Fail mode: simulating network failure", { data: { events: t.events.length } }), M;
+    if (this.apiUrl.includes(R.Localhost))
+      return a("debug", "Success mode: simulating successful send", { data: { events: t.events.length } }), { ok: !0, receipt: null };
     if (this.isRateLimited())
       return a("debug", "Rate-limit cooldown active, skipping send", {
         data: {
           cooldownRemainingMs: this.rateLimitedUntil - Date.now(),
           events: t.events.length
         }
-      }), !1;
+      }), M;
     if (this.consecutiveNetworkFailures >= 3) {
       const c = Date.now() - this.circuitOpenedAt;
       if (c < 12e4)
@@ -1111,26 +1151,31 @@ class Os extends T {
             consecutiveNetworkFailures: this.consecutiveNetworkFailures,
             cooldownRemainingMs: 12e4 - c
           }
-        }), !1;
+        }), M;
     }
     const { url: s, payload: r } = this.prepareRequest(t);
     let i = !0, o = !1;
     for (let c = 1; c <= 3; c++)
       try {
-        return (await this.sendWithTimeout(s, r)).ok ? (c > 1 && a("info", `Send succeeded after ${c - 1} retry attempt(s)`, {
-          data: { events: t.events.length, attempt: c }
-        }), this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0, !0) : !1;
+        const l = await this.sendWithTimeout(s, r);
+        if (l.ok) {
+          const u = await this.readIngestionReceipt(l);
+          return c > 1 && a("info", `Send succeeded after ${c - 1} retry attempt(s)`, {
+            data: { events: t.events.length, attempt: c }
+          }), this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0, { ok: !0, receipt: u };
+        }
+        return M;
       } catch (l) {
         const u = c === 3;
         if (l instanceof C)
-          throw this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0, l.statusCode === 403 ? this.emitHealthBeacon("events_blocked", l.message) : l.statusCode === 404 && l.responseCode === Ns && this.emitHealthBeacon("unknown_project", l.message), l;
-        if (l instanceof Z) {
+          throw this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0, l.statusCode === 403 ? this.emitHealthBeacon("events_blocked", l.message) : l.statusCode === 404 && l.responseCode === Us && this.emitHealthBeacon("unknown_project", l.message), l;
+        if (l instanceof ee) {
           this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0, this.armRateLimitCooldown(Date.now() + 6e4), a("warn", "Rate limited, skipping retries", {
             data: { events: e.events.length, attempt: c, cooldownMs: 6e4 }
           });
           break;
         }
-        if (l instanceof ee || (i = !1), l instanceof TypeError || (o = !0), a(
+        if (l instanceof te || (i = !1), l instanceof TypeError || (o = !0), a(
           u ? "error" : "warn",
           `Send attempt ${c} failed${u ? " (all retries exhausted)" : ", will retry"}`,
           {
@@ -1148,12 +1193,12 @@ class Os extends T {
         }
         return i ? (a("debug", "All retry attempts timed out, preserving batch for retry", {
           data: { events: t.events.length }
-        }), !1) : (o ? (this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0) : (this.consecutiveNetworkFailures = Math.min(
+        }), M) : (o ? (this.consecutiveNetworkFailures = 0, this.circuitOpenedAt = 0) : (this.consecutiveNetworkFailures = Math.min(
           this.consecutiveNetworkFailures + 1,
           3
-        ), this.consecutiveNetworkFailures >= 3 && (this.circuitOpenedAt = Date.now())), !1);
+        ), this.consecutiveNetworkFailures >= 3 && (this.circuitOpenedAt = Date.now())), M);
       }
-    return !1;
+    return M;
   }
   async sendWithTimeout(e, t) {
     const s = new AbortController();
@@ -1175,39 +1220,90 @@ class Os extends T {
       });
       if (!o.ok) {
         if (o.status >= 400 && o.status < 500 && o.status !== 408 && o.status !== 429) {
-          const l = await this.readTraceLogErrorCode(o), u = l ? `HTTP ${o.status}: ${o.statusText} (${l})` : `HTTP ${o.status}: ${o.statusText}`;
-          throw new C(u, o.status, l);
+          const { responseCode: l, receipt: u } = await this.readTraceLogResponseMetadata(o), h = l ? `HTTP ${o.status}: ${o.statusText} (${l})` : `HTTP ${o.status}: ${o.statusText}`;
+          throw new C(h, o.status, l, u ?? void 0);
         }
-        throw o.status === 429 ? new Z(`HTTP 429: ${o.statusText}`) : new Error(`HTTP ${o.status}: ${o.statusText}`);
+        throw o.status === 429 ? new ee(`HTTP 429: ${o.statusText}`) : new Error(`HTTP ${o.status}: ${o.statusText}`);
       }
       return o;
     } catch (o) {
-      throw o instanceof C ? o : r ? new ee("Request timed out") : o;
+      throw o instanceof C ? o : r ? new te("Request timed out") : o;
     } finally {
       clearTimeout(i), this.pendingControllers.delete(s);
     }
   }
   /**
-   * Extracts the application error code from a 4xx body, and with it the proof that a TraceLog
-   * host — not an arbitrary server answering the same name — produced the response.
+   * Extracts the application error code AND the ingestion receipt from a 4xx body, and with them
+   * the proof that a TraceLog host — not an arbitrary server answering the same name — produced
+   * the response.
    *
-   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path }`,
+   * Only the ingest error envelope is accepted: `{ statusCode, error, message, timestamp, path, ...receipt }`,
    * the single shape every rejection arrives in (tracelog-middleware's `AllExceptionsFilter`, which
-   * renders an exception's own `code` into `error`). `error` counts only when `statusCode` echoes
-   * the HTTP status — that pairing is the envelope's signature, and neither a generic
+   * renders an exception's own `code` into `error`). Both readings count only when `statusCode`
+   * echoes the HTTP status — that pairing is the envelope's signature, and neither a generic
    * `{"error":"Not Found"}` nor a bare `{"code":"..."}` from a foreign host can produce it.
    *
    * An uncorroborated code is deliberately NOT read: a code is both a log detail and the authorship
    * proof {@link HealthBeaconReason} `unknown_project` gates on, so accepting one nobody vouched for
-   * would let any responder authorize a claim about TraceLog's own records. `undefined` therefore
-   * means exactly "nothing here identifies the responder as TraceLog".
+   * would let any responder authorize a claim about TraceLog's own records. The receipt is held to
+   * the same bar for the same reason — it reports how much of the merchant's traffic was dropped and
+   * why, so an unvouched one is a lie about their data, not a missing log detail. A `null` receipt
+   * and an `undefined` code both mean exactly "nothing here identifies the responder as TraceLog".
+   *
+   * {@link parseCollectReceipt} then adds the consistency half: a rejection whose receipt reports
+   * `dropped: 0` is discarded, because the server derives `outcome`/`coverage` from `dropped` and
+   * such a body arrives claiming the refused batch was accepted and complete.
    */
-  async readTraceLogErrorCode(e) {
+  async readTraceLogResponseMetadata(e) {
     try {
       const t = await e.clone().json();
-      if (t.statusCode === e.status && Rs(t.error))
-        return t.error;
+      if (!ut(t, e.status))
+        return { receipt: null };
+      const s = this.noteReceipt(tt(t, e));
+      return Fs(t.error) ? { responseCode: t.error, receipt: s } : { receipt: s };
     } catch {
+    }
+    return { receipt: null };
+  }
+  /**
+   * Surfaces a receipt that reports data loss, and returns it unchanged so it can wrap a parse.
+   *
+   * `dropped` is the only counter worth a line: it is the one that means events were refused
+   * against the caller's intent. `filtered` is the project's own sampling or exclusions working
+   * exactly as configured, so keying on it would emit on every batch of a healthy project.
+   *
+   * `debug` with no `visibility` is deliberate per the logging policy. A refusal is a server-side
+   * account, quota, or guardrail decision that a visitor to the merchant's site can do nothing
+   * about and must never see, so this stays development-only — production is silent even under
+   * `?tlog_mode=qa`, which is reserved for custom-event verification.
+   */
+  noteReceipt(e) {
+    return e && e.dropped > 0 && a("debug", "Ingestion receipt reports dropped events", {
+      data: {
+        outcome: e.outcome,
+        accepted: e.accepted,
+        dropped: e.dropped,
+        coverage: e.coverage,
+        ...e.reason ? { reason: e.reason } : {},
+        ...e.retryAt ? { retryAt: e.retryAt } : {}
+      }
+    }), e;
+  }
+  /**
+   * Reads the receipt off a 2xx collect response.
+   *
+   * No envelope signature is required here — the success body is `CollectResponse`, which carries
+   * no `statusCode` to echo, and a 2xx already means the responder accepted the batch, so the
+   * receipt only refines an acceptance the status itself established. What remains is
+   * {@link parseCollectReceipt}'s structural strictness (three non-negative integers plus two
+   * closed literal unions, a shape nothing answering the route by accident produces) and its
+   * refusal of a receipt that accounts for no events at all.
+   */
+  async readIngestionReceipt(e) {
+    try {
+      return this.noteReceipt(tt(await e.clone().json(), e));
+    } catch {
+      return null;
     }
   }
   sendQueueSyncInternal(e) {
@@ -1232,7 +1328,7 @@ class Os extends T {
         idempotency_token: e._metadata?.idempotency_token ?? this.computeContentToken(e),
         referer: typeof window < "u" ? window.location.href : void 0,
         timestamp: t,
-        client_version: ts
+        client_version: rs
       }
     };
     return {
@@ -1324,7 +1420,7 @@ class Os extends T {
   }
   logPermanentError(e, t) {
     const s = Date.now(), r = `${t.statusCode ?? "unknown"}:${t.responseCode ?? ""}`;
-    (this.lastPermanentErrorLog?.key !== r || s - this.lastPermanentErrorLog.timestamp >= Kt) && (a("error", e, {
+    (this.lastPermanentErrorLog?.key !== r || s - this.lastPermanentErrorLog.timestamp >= Yt) && (a("error", e, {
       data: { status: t.statusCode, code: t.responseCode, message: t.message }
     }), this.lastPermanentErrorLog = { key: r, timestamp: s });
   }
@@ -1345,7 +1441,7 @@ class Os extends T {
         projectId: s.projectId,
         reason: e,
         origin: i,
-        ...t ? { lastError: t.slice(0, Yt) } : {}
+        ...t ? { lastError: t.slice(0, Zt) } : {}
       });
       this.postBeacon(r, o);
     } catch {
@@ -1362,14 +1458,14 @@ class Os extends T {
    * and avoids turning transport failures into retry bursts.
    */
   markBeaconEmitted(e, t) {
-    const s = Date.now(), r = It(e, t);
+    const s = Date.now(), r = bt(e, t);
     let i = this.lastBeaconAt[t] ?? 0;
     try {
       const o = Number(this.storeManager.getItem(r));
       Number.isFinite(o) && o > i && (i = o);
     } catch {
     }
-    if (s - i < Qt) return !1;
+    if (s - i < Jt) return !1;
     this.lastBeaconAt[t] = s;
     try {
       this.storeManager.setItem(r, String(s));
@@ -1379,7 +1475,7 @@ class Os extends T {
   }
   /** The collect URL the lib already derived, with the path swapped to the diagnostics route. */
   resolveBeaconUrl() {
-    return this.apiUrl.includes(M.Localhost) || this.apiUrl.includes(M.Fail) || !/\/collect$/.test(this.apiUrl) ? null : this.apiUrl.replace(/\/collect$/, "/client-error");
+    return this.apiUrl.includes(R.Localhost) || this.apiUrl.includes(R.Fail) || !/\/collect$/.test(this.apiUrl) ? null : this.apiUrl.replace(/\/collect$/, "/client-error");
   }
   postBeacon(e, t) {
     if (this.isSendBeaconAvailable()) {
@@ -1395,7 +1491,7 @@ class Os extends T {
     });
   }
 }
-class Ps extends T {
+class Hs extends T {
   bootTime;
   bootTimestamp;
   hasPerformanceNow;
@@ -1429,8 +1525,8 @@ class Ps extends T {
     } : { valid: !0 };
   }
 }
-const ks = new Set(Object.values(d));
-class Ds extends T {
+const xs = new Set(Object.values(d));
+class Bs extends T {
   dataSenders;
   emitter;
   timeManager;
@@ -1462,9 +1558,9 @@ class Ds extends T {
    * @param emitter - Optional event emitter for local event consumption
    */
   constructor(e, t = null) {
-    super(), this.emitter = t, this.timeManager = new Ps(), this.dataSenders = [];
+    super(), this.emitter = t, this.timeManager = new Hs(), this.dataSenders = [];
     const s = this.get("collectApiUrls");
-    s?.saas && this.dataSenders.push(new Os(e, s.saas)), this.saveSessionCountsDebounced = this.debounce((r) => {
+    s?.saas && this.dataSenders.push(new Vs(e, s.saas)), this.saveSessionCountsDebounced = this.debounce((r) => {
       this.saveSessionCounts(r);
     }, 500), this.cleanupExpiredSessionCounts();
   }
@@ -1582,7 +1678,7 @@ class Ds extends T {
       a("error", "Event type is required - event will be ignored");
       return;
     }
-    if (!ks.has(e)) {
+    if (!xs.has(e)) {
       a("error", "Invalid event type - event will be ignored", {
         data: { type: e }
       });
@@ -1625,12 +1721,12 @@ class Ds extends T {
       }
       const _ = this.getTypeLimitForEvent(S);
       if (_) {
-        const ce = this.sessionEventCounts[S];
-        if (ce !== void 0 && ce >= _) {
+        const le = this.sessionEventCounts[S];
+        if (le !== void 0 && le >= _) {
           a("warn", "Session event type limit reached", {
             data: {
               type: S,
-              count: ce,
+              count: le,
               limit: _
             }
           });
@@ -1643,9 +1739,9 @@ class Ds extends T {
       if (!this.checkPerEventRateLimit(o.name, _))
         return;
     }
-    const St = S === d.SESSION_START, Et = t || this.get("pageUrl"), W = this.buildEventPayload({
+    const Tt = S === d.SESSION_START, _t = t || this.get("pageUrl"), K = this.buildEventPayload({
       type: S,
-      page_url: Et,
+      page_url: _t,
       from_page_url: s,
       scroll_data: r,
       click_data: i,
@@ -1654,8 +1750,8 @@ class Ds extends T {
       error_data: l,
       page_view: u
     });
-    if (W && !(!p && S !== d.WEB_VITALS && !this.shouldSample())) {
-      if (St) {
+    if (K && !(!p && S !== d.WEB_VITALS && !this.shouldSample())) {
+      if (Tt) {
         const _ = this.get("sessionId");
         if (!_) {
           a("error", "Session start event requires sessionId - event will be ignored");
@@ -1669,18 +1765,18 @@ class Ds extends T {
         }
         this.set("hasStartSession", !0);
       }
-      if (!this.isDuplicateEvent(W)) {
-        if (this.get("mode") === te.QA && S === d.CUSTOM && o) {
+      if (!this.isDuplicateEvent(K)) {
+        if (this.get("mode") === se.QA && S === d.CUSTOM && o) {
           a("info", `Custom Event: ${o.name}`, {
             visibility: "qa",
             data: {
               name: o.name,
               ...o.metadata && { metadata: o.metadata }
             }
-          }), this.emitEvent(W);
+          }), this.emitEvent(K);
           return;
         }
-        if (this.addToQueue(W), !p) {
+        if (this.addToQueue(K), !p) {
           this.sessionEventCounts.total++, this.sessionEventCounts[S] !== void 0 && this.sessionEventCounts[S]++;
           const _ = this.get("sessionId");
           _ && this.saveSessionCountsDebounced && this.saveSessionCountsDebounced(_);
@@ -2138,7 +2234,7 @@ class Ds extends T {
     });
     const c = this.get("sessionReferrer"), l = this.get("sessionUtm"), u = this.get("sessionClickIds");
     return { ...{
-      id: ds(),
+      id: gs(),
       type: e.type,
       page_url: r,
       timestamp: i,
@@ -2246,11 +2342,11 @@ class Ds extends T {
   emitEvent(e) {
     if (this.emitter) {
       const { _session_id: t, ...s } = e;
-      this.emitter.emit(V.EVENT, s);
+      this.emitter.emit(H.EVENT, s);
     }
   }
   emitEventsQueue(e) {
-    this.emitter && this.emitter.emit(V.QUEUE, e);
+    this.emitter && this.emitter.emit(H.QUEUE, e);
   }
   /**
    * Creates a debounced version of a function that delays execution until after
@@ -2325,13 +2421,13 @@ class Ds extends T {
   loadSessionCounts(e) {
     if (typeof window > "u" || typeof localStorage > "u")
       return this.getInitialCounts();
-    const t = this.get("userId") || "anonymous", s = Ve(t, e);
+    const t = this.get("userId") || "anonymous", s = He(t, e);
     try {
       const r = localStorage.getItem(s);
       if (!r)
         return this.getInitialCounts();
       const i = JSON.parse(r);
-      return i._timestamp && Date.now() - i._timestamp > He ? (a("debug", "Session counts expired, clearing", {
+      return i._timestamp && Date.now() - i._timestamp > xe ? (a("debug", "Session counts expired, clearing", {
         data: { sessionId: e, age: Date.now() - i._timestamp }
       }), localStorage.removeItem(s), this.getInitialCounts()) : typeof i.total == "number" && typeof i[d.CLICK] == "number" && typeof i[d.PAGE_VIEW] == "number" && typeof i[d.CUSTOM] == "number" && typeof i[d.SCROLL] == "number" ? {
         total: i.total,
@@ -2375,12 +2471,12 @@ class Ds extends T {
   cleanupExpiredSessionCounts() {
     if (!(typeof window > "u" || typeof localStorage > "u"))
       try {
-        const e = localStorage.getItem(xe);
+        const e = localStorage.getItem(Be);
         if (e) {
           const i = Date.now() - parseInt(e, 10);
-          if (i < Be) {
+          if (i < $e) {
             a("debug", "Skipping session counts cleanup (throttled)", {
-              data: { timeSinceLastCleanup: i, throttleMs: Be }
+              data: { timeSinceLastCleanup: i, throttleMs: $e }
             });
             return;
           }
@@ -2393,14 +2489,14 @@ class Ds extends T {
               const c = localStorage.getItem(o);
               if (c) {
                 const l = JSON.parse(c);
-                l._timestamp && Date.now() - l._timestamp > He && r.push(o);
+                l._timestamp && Date.now() - l._timestamp > xe && r.push(o);
               }
             } catch {
             }
         }
         r.forEach((i) => {
           localStorage.removeItem(i), a("debug", "Cleaned up expired session counts", { data: { key: i } });
-        }), r.length > 0 && a("info", `Cleaned up ${r.length} expired session counts entries`), localStorage.setItem(xe, Date.now().toString());
+        }), r.length > 0 && a("info", `Cleaned up ${r.length} expired session counts entries`), localStorage.setItem(Be, Date.now().toString());
       } catch (e) {
         a("warn", "Failed to cleanup expired session counts", { error: e });
       }
@@ -2434,7 +2530,7 @@ class Ds extends T {
    * @internal
    */
   saveSessionCounts(e) {
-    const t = this.get("userId") || "anonymous", s = Ve(t, e);
+    const t = this.get("userId") || "anonymous", s = He(t, e);
     try {
       const r = {
         ...this.sessionEventCounts,
@@ -2450,7 +2546,7 @@ class Ds extends T {
     }
   }
 }
-class Us {
+class $s {
   /**
    * Gets or creates a unique user ID.
    *
@@ -2468,15 +2564,15 @@ class Us {
    * @returns Persistent unique user ID (UUID v4 format)
    */
   static getId(e) {
-    const t = e.getItem(Ee);
+    const t = e.getItem(ve);
     if (t)
       return t;
-    const s = at();
-    return e.setItem(Ee, s), s;
+    const s = lt();
+    return e.setItem(ve, s), s;
   }
 }
-const Fs = /^\d{13}-[a-z0-9]{9}$/;
-class Vs extends T {
+const js = /^\d{13}-[a-z0-9]{9}$/;
+class Xs extends T {
   storageManager;
   eventManager;
   projectId;
@@ -2503,7 +2599,7 @@ class Vs extends T {
       return;
     }
     const e = this.getProjectId();
-    this.broadcastChannel = new BroadcastChannel(At(e)), this.broadcastChannel.onmessage = (t) => {
+    this.broadcastChannel = new BroadcastChannel(Mt(e)), this.broadcastChannel.onmessage = (t) => {
       const { action: s, sessionId: r, timestamp: i, projectId: o } = t.data ?? {};
       if (o === e)
         if (s === "session_start" && r && typeof i == "number" && i > Date.now() - 5e3) {
@@ -2528,7 +2624,7 @@ class Vs extends T {
     const e = this.loadStoredSession();
     if (!e)
       return null;
-    if (!Fs.test(e.id))
+    if (!js.test(e.id))
       return a("warn", "Invalid session ID format recovered from storage, clearing", {
         data: { sessionId: e.id }
       }), this.clearStoredSession(), null;
@@ -2574,7 +2670,7 @@ class Vs extends T {
     this.storageManager.setItem(t, s), this.storageManager.setSessionItem(t, s);
   }
   getSessionStorageKey() {
-    return wt(this.getProjectId());
+    return Lt(this.getProjectId());
   }
   getProjectId() {
     return this.projectId;
@@ -2647,9 +2743,9 @@ class Vs extends T {
     let s, r, i;
     if (e) {
       const o = this.loadStoredSession();
-      s = o?.referrer ?? fe(this.get("config").sensitiveQueryParams), r = o?.utm ?? ge(), i = o?.clickIds ?? he();
+      s = o?.referrer ?? ge(this.get("config").sensitiveQueryParams), r = o?.utm ?? me(), i = o?.clickIds ?? fe();
     } else
-      s = fe(this.get("config").sensitiveQueryParams), r = ge(), i = he();
+      s = ge(this.get("config").sensitiveQueryParams), r = me(), i = fe();
     a("debug", "Session tracking initialized", {
       data: {
         sessionId: t,
@@ -2661,7 +2757,7 @@ class Vs extends T {
       }
     }), this.isTracking = !0;
     try {
-      if (this.set("sessionId", t), this.set("sessionReferrer", s), this.set("sessionUtm", r), this.set("sessionClickIds", i), ot()) {
+      if (this.set("sessionId", t), this.set("sessionReferrer", s), this.set("sessionUtm", r), this.set("sessionClickIds", i), ct()) {
         this.prerenderActivationHandler = () => {
           this.prerenderActivationHandler = null, this.activateSession(t, e, s, r, i);
         }, document.addEventListener("prerenderingchange", this.prerenderActivationHandler, { once: !0 });
@@ -2721,7 +2817,7 @@ class Vs extends T {
    */
   renewSession() {
     this.needsRenewal = !1;
-    const e = this.generateSessionId(), t = fe(this.get("config").sensitiveQueryParams), s = ge(), r = he();
+    const e = this.generateSessionId(), t = ge(this.get("config").sensitiveQueryParams), s = me(), r = fe();
     a("debug", "Renewing session after timeout", {
       data: { newSessionId: e }
     }), this.set("sessionId", e), this.set("sessionReferrer", t), this.set("sessionUtm", s), this.set("sessionClickIds", r), this.persistSession(e, Date.now(), t, s, r), this.cleanupCrossTabSync(), this.initCrossTabSync(), this.shareSession(e), this.eventManager.track({
@@ -2851,7 +2947,7 @@ class Vs extends T {
     this.prerenderActivationHandler && (document.removeEventListener("prerenderingchange", this.prerenderActivationHandler), this.prerenderActivationHandler = null);
   }
 }
-class Hs extends T {
+class Gs extends T {
   eventManager;
   storageManager;
   sessionManager = null;
@@ -2886,7 +2982,7 @@ class Hs extends T {
     }
     const t = this.get("config")?.integrations?.tracelog?.projectId ?? "custom";
     try {
-      this.sessionManager = new Vs(this.storageManager, this.eventManager, t), this.sessionManager.startTracking(), this.eventManager.flushPendingEvents();
+      this.sessionManager = new Xs(this.storageManager, this.eventManager, t), this.sessionManager.startTracking(), this.eventManager.flushPendingEvents();
     } catch (s) {
       if (this.sessionManager) {
         try {
@@ -2939,7 +3035,7 @@ class Hs extends T {
     this.destroyed || (this.sessionManager && (this.sessionManager.destroy(), this.sessionManager = null), this.destroyed = !0);
   }
 }
-class xs extends T {
+class Ws extends T {
   eventManager;
   onTrack;
   originalPushState;
@@ -2979,7 +3075,7 @@ class xs extends T {
     };
   }
   trackCurrentPage = () => {
-    const e = window.location.href, t = D(e, this.get("config").sensitiveQueryParams);
+    const e = window.location.href, t = U(e, this.get("config").sensitiveQueryParams);
     if (this.get("pageUrl") === t)
       return;
     const s = Date.now(), r = this.get("config").pageViewThrottleMs ?? 1e3;
@@ -2997,7 +3093,7 @@ class xs extends T {
     }), this.get("config").flushOnSpaNavigation === !0 && this.eventManager.flushImmediately();
   };
   trackInitialPageView() {
-    const e = D(window.location.href, this.get("config").sensitiveQueryParams), t = this.extractPageViewData();
+    const e = U(window.location.href, this.get("config").sensitiveQueryParams), t = this.extractPageViewData();
     this.lastPageViewTime = Date.now(), this.eventManager.track({
       type: d.PAGE_VIEW,
       page_url: e,
@@ -3005,7 +3101,7 @@ class xs extends T {
     }), this.onTrack();
   }
   extractPageViewData() {
-    const e = document.referrer ? D(document.referrer, this.get("config").sensitiveQueryParams) : "", { title: t } = document;
+    const e = document.referrer ? U(document.referrer, this.get("config").sensitiveQueryParams) : "", { title: t } = document;
     if (!(!e && !t))
       return {
         ...e && { referrer: e },
@@ -3013,7 +3109,7 @@ class xs extends T {
       };
   }
 }
-class Bs extends T {
+class Ks extends T {
   eventManager;
   lastClickTimes = /* @__PURE__ */ new Map();
   clickHandler;
@@ -3081,7 +3177,7 @@ class Bs extends T {
     this.clickHandler && (window.removeEventListener("click", this.clickHandler, !0), this.clickHandler = void 0), this.lastClickTimes.clear(), this.lastPruneTime = 0;
   }
   shouldIgnoreElement(e) {
-    return e.hasAttribute(`${L}-ignore`) ? !0 : e.closest(`[${L}-ignore]`) !== null;
+    return e.hasAttribute(`${b}-ignore`) ? !0 : e.closest(`[${b}-ignore]`) !== null;
   }
   /**
    * Checks per-element click throttling to prevent double-clicks and rapid spam
@@ -3132,8 +3228,8 @@ class Bs extends T {
     const t = e.getAttribute("data-testid");
     if (t)
       return `[data-testid="${t}"]`;
-    const s = e.getAttribute(`${L}-name`);
-    return s ? `[${L}-name="${s}"]` : this.getElementPath(e);
+    const s = e.getAttribute(`${b}-name`);
+    return s ? `[${b}-name="${s}"]` : this.getElementPath(e);
   }
   /**
    * Generates a DOM path for an element (e.g., "body>div>button")
@@ -3152,10 +3248,10 @@ class Bs extends T {
     return t.join(">") || "unknown";
   }
   findTrackingElement(e) {
-    return e.hasAttribute(`${L}-name`) ? e : e.closest(`[${L}-name]`);
+    return e.hasAttribute(`${b}-name`) ? e : e.closest(`[${b}-name]`);
   }
   getRelevantClickElement(e) {
-    for (const t of vt)
+    for (const t of yt)
       try {
         if (e.matches(t))
           return e;
@@ -3173,7 +3269,7 @@ class Bs extends T {
     return typeof t != "number" || typeof s != "number" || !Number.isFinite(t) || !Number.isFinite(s) || t === 0 && s === 0 && !e.isTrusted ? null : { x: t, y: s };
   }
   extractTrackingData(e) {
-    const t = e.getAttribute(`${L}-name`), s = e.getAttribute(`${L}-value`);
+    const t = e.getAttribute(`${b}-name`), s = e.getAttribute(`${b}-value`);
     if (t)
       return {
         element: e,
@@ -3182,13 +3278,13 @@ class Bs extends T {
       };
   }
   generateClickData(e, t, s) {
-    const { x: r, y: i } = s, o = this.getRelevantText(e, t), c = t.getAttribute("href"), l = c ? D(c, this.get("config").sensitiveQueryParams) : void 0;
+    const { x: r, y: i } = s, o = this.getRelevantText(e, t), c = t.getAttribute("href"), l = c ? U(c, this.get("config").sensitiveQueryParams) : void 0;
     return {
       x: r,
       y: i,
       tag: t.tagName.toLowerCase(),
-      ...t.id && { id: U(t.id) },
-      ...t.className && { class: U(t.className) },
+      ...t.id && { id: F(t.id) },
+      ...t.className && { class: F(t.className) },
       ...o && { text: o },
       ...l && { href: l }
     };
@@ -3198,7 +3294,7 @@ class Bs extends T {
     if (!s && !r)
       return "";
     let i;
-    return s && s.length <= 255 ? i = s : r.length <= 255 ? i = r : i = r.slice(0, 252) + "...", U(i);
+    return s && s.length <= 255 ? i = s : r.length <= 255 ? i = r : i = r.slice(0, 252) + "...", F(i);
   }
   createCustomEventData(e) {
     return {
@@ -3207,7 +3303,7 @@ class Bs extends T {
     };
   }
 }
-class $s extends T {
+class zs extends T {
   eventManager;
   containers = [];
   limitWarningLogged = !1;
@@ -3333,7 +3429,7 @@ class $s extends T {
     e.debounceTimer !== null && (clearTimeout(e.debounceTimer), e.debounceTimer = null);
   }
   getScrollDirection(e, t) {
-    return e > t ? ve.DOWN : ve.UP;
+    return e > t ? Te.DOWN : Te.UP;
   }
   calculateScrollDepth(e, t, s) {
     if (t <= s)
@@ -3362,8 +3458,8 @@ class $s extends T {
     return s && r;
   }
 }
-const js = "tracelog_session_id", Xs = "tracelog_user_id";
-class Gs extends T {
+const Qs = "tracelog_session_id", Ys = "tracelog_user_id";
+class qs extends T {
   visibilityHandler = null;
   pageshowHandler = null;
   lastSyncedKey = null;
@@ -3384,8 +3480,8 @@ class Gs extends T {
     r !== this.lastSyncedKey && (this.lastSyncedKey = r, this.postCartUpdate(e, s));
   }
   postCartUpdate(e, t) {
-    const s = { [js]: e };
-    t.length > 0 && (s[Xs] = t);
+    const s = { [Qs]: e };
+    t.length > 0 && (s[Ys] = t);
     try {
       fetch("/cart/update.js", {
         method: "POST",
@@ -3422,7 +3518,7 @@ class Gs extends T {
     this.visibilityHandler && (document.removeEventListener("visibilitychange", this.visibilityHandler), this.visibilityHandler = null), this.pageshowHandler && (window.removeEventListener("pageshow", this.pageshowHandler), this.pageshowHandler = null);
   }
 }
-class Ws {
+class Js {
   storage;
   sessionStorageRef;
   fallbackStorage = /* @__PURE__ */ new Map();
@@ -3535,7 +3631,7 @@ class Ws {
     this.fallbackSessionStorage.delete(e);
   }
 }
-class Ks extends T {
+class Zs extends T {
   eventManager;
   seenNavIds = /* @__PURE__ */ new Set();
   navigationHistory = [];
@@ -3561,7 +3657,7 @@ class Ks extends T {
     typeof document < "u" && document.hidden && this.flushAndDeliver(this.get("config").flushOnPageHidden !== !1);
   };
   constructor(e) {
-    super(), this.eventManager = e, this.vitalThresholds = Qe(ye);
+    super(), this.eventManager = e, this.vitalThresholds = Ye(Ie);
   }
   /**
    * Starts tracking Web Vitals and performance metrics.
@@ -3578,8 +3674,8 @@ class Ks extends T {
    * @returns Promise that resolves when tracking is initialized
    */
   async startTracking() {
-    const e = this.get("config"), t = e?.webVitalsMode ?? ye;
-    this.vitalThresholds = Qe(t), e?.webVitalsThresholds && (this.vitalThresholds = { ...this.vitalThresholds, ...e.webVitalsThresholds }), this.isTracking = !0;
+    const e = this.get("config"), t = e?.webVitalsMode ?? Ie;
+    this.vitalThresholds = Ye(t), e?.webVitalsThresholds && (this.vitalThresholds = { ...this.vitalThresholds, ...e.webVitalsThresholds }), this.isTracking = !0;
     try {
       await this.initWebVitals();
     } finally {
@@ -3682,7 +3778,7 @@ class Ks extends T {
   }
   async initWebVitals() {
     try {
-      const { onLCP: e, onCLS: t, onFCP: s, onTTFB: r, onINP: i } = await Promise.resolve().then(() => Tn), o = (c) => (l) => {
+      const { onLCP: e, onCLS: t, onFCP: s, onTTFB: r, onINP: i } = await Promise.resolve().then(() => bn), o = (c) => (l) => {
         const u = Number(l.value.toFixed(2));
         this.sendVital({ type: c, value: u });
       };
@@ -3720,7 +3816,7 @@ class Ks extends T {
       return;
     const t = this.getNavigationId();
     if (t) {
-      if (!this.seenNavIds.has(t) && (this.seenNavIds.add(t), this.navigationHistory.push(t), this.navigationHistory.length > Zt)) {
+      if (!this.seenNavIds.has(t) && (this.seenNavIds.add(t), this.navigationHistory.push(t), this.navigationHistory.length > ss)) {
         const s = this.navigationHistory.shift();
         s && this.seenNavIds.delete(s);
       }
@@ -3848,7 +3944,7 @@ class Ks extends T {
     return !(typeof s == "number" && t <= s);
   }
 }
-class ne extends T {
+class re extends T {
   eventManager;
   emitter;
   recentErrors = /* @__PURE__ */ new Map();
@@ -3875,7 +3971,7 @@ class ne extends T {
       this.resetPageviewCounter();
     }, window.addEventListener("pagehide", this.pagehideHandler, { passive: !0 }), this.emitter && (this.pageviewResetListener = (e) => {
       (e.type === d.SESSION_START || e.type === d.PAGE_VIEW) && this.resetPageviewCounter();
-    }, this.emitter.on(V.EVENT, this.pageviewResetListener));
+    }, this.emitter.on(H.EVENT, this.pageviewResetListener));
   }
   /**
    * Stops tracking errors and cleans up resources.
@@ -3886,7 +3982,7 @@ class ne extends T {
    * - Resets burst detection counters
    */
   stopTracking() {
-    window.removeEventListener("error", this.handleError), window.removeEventListener("unhandledrejection", this.handleRejection), this.pagehideHandler && (window.removeEventListener("pagehide", this.pagehideHandler), this.pagehideHandler = null), this.emitter && this.pageviewResetListener && (this.emitter.off(V.EVENT, this.pageviewResetListener), this.pageviewResetListener = null), this.recentErrors.clear(), this.pageviewSignatureCounts.clear(), this.errorBurstCounter = 0, this.burstWindowStart = 0, this.burstBackoffUntil = 0;
+    window.removeEventListener("error", this.handleError), window.removeEventListener("unhandledrejection", this.handleRejection), this.pagehideHandler && (window.removeEventListener("pagehide", this.pagehideHandler), this.pagehideHandler = null), this.emitter && this.pageviewResetListener && (this.emitter.off(H.EVENT, this.pageviewResetListener), this.pageviewResetListener = null), this.recentErrors.clear(), this.pageviewSignatureCounts.clear(), this.errorBurstCounter = 0, this.burstWindowStart = 0, this.burstBackoffUntil = 0;
   }
   /**
    * Clears the per-pageview signature counter.
@@ -3905,14 +4001,14 @@ class ne extends T {
     const e = Date.now();
     if (e < this.burstBackoffUntil)
       return !1;
-    if (e - this.burstWindowStart > jt && (this.errorBurstCounter = 0, this.burstWindowStart = e), this.errorBurstCounter++, this.errorBurstCounter > Xt)
-      return this.burstBackoffUntil = e + Ke, a("debug", "Error burst detected - entering cooldown", {
+    if (e - this.burstWindowStart > Wt && (this.errorBurstCounter = 0, this.burstWindowStart = e), this.errorBurstCounter++, this.errorBurstCounter > Kt)
+      return this.burstBackoffUntil = e + ze, a("debug", "Error burst detected - entering cooldown", {
         data: {
           errorsInWindow: this.errorBurstCounter,
-          cooldownMs: Ke
+          cooldownMs: ze
         }
       }), !1;
-    const s = this.get("config").errorSampling ?? it;
+    const s = this.get("config").errorSampling ?? at;
     return Math.random() < s;
   }
   /**
@@ -3922,19 +4018,19 @@ class ne extends T {
    * later signature that recycles the same map key after a counter reset.
    */
   shouldThrottleBySignature(e) {
-    const t = Cs(e), s = this.pageviewSignatureCounts.get(t) ?? 0;
-    if (s >= Gt)
+    const t = Os(e), s = this.pageviewSignatureCounts.get(t) ?? 0;
+    if (s >= zt)
       return a("debug", "Error throttled (pageview cap)", {
         data: { signature: t, count: s }
       }), !0;
     const r = s + 1;
-    return this.pageviewSignatureCounts.set(t, r), this.pageviewSignatureCounts.size > Wt && (this.pageviewSignatureCounts.clear(), this.pageviewSignatureCounts.set(t, r)), !1;
+    return this.pageviewSignatureCounts.set(t, r), this.pageviewSignatureCounts.size > Qt && (this.pageviewSignatureCounts.clear(), this.pageviewSignatureCounts.set(t, r)), !1;
   }
   handleError = (e) => {
     if (!this.shouldSample())
       return;
     const t = this.sanitizeMessage(e.message, "Unknown error");
-    if (this.shouldSuppressError(x.JS_ERROR, t) || this.shouldThrottleBySignature({
+    if (this.shouldSuppressError(B.JS_ERROR, t) || this.shouldThrottleBySignature({
       message: t,
       filename: e.filename,
       line: e.lineno,
@@ -3949,7 +4045,7 @@ class ne extends T {
     this.eventManager.track({
       type: d.ERROR,
       error_data: {
-        type: x.JS_ERROR,
+        type: B.JS_ERROR,
         message: t,
         ...r !== void 0 && { name: r },
         ...e.filename !== "" && { filename: e.filename },
@@ -3963,13 +4059,13 @@ class ne extends T {
     if (!this.shouldSample())
       return;
     const t = this.extractRejectionMessage(e.reason), s = this.sanitizeMessage(t, "Unknown rejection");
-    if (this.shouldSuppressError(x.PROMISE_REJECTION, s) || this.shouldThrottleBySignature({ message: s }))
+    if (this.shouldSuppressError(B.PROMISE_REJECTION, s) || this.shouldThrottleBySignature({ message: s }))
       return;
     const r = e.reason instanceof Error && typeof e.reason.stack == "string" ? this.truncateStack(e.reason.stack) : void 0, i = e.reason instanceof Error && e.reason.name !== "Error" ? e.reason.name : void 0;
     this.eventManager.track({
       type: d.ERROR,
       error_data: {
-        type: x.PROMISE_REJECTION,
+        type: B.PROMISE_REJECTION,
         message: s,
         ...i !== void 0 && { name: i },
         ...r !== void 0 && { stack: r }
@@ -3990,8 +4086,8 @@ class ne extends T {
     }
   }
   sanitize(e) {
-    const t = e.length > Xe ? e.slice(0, Xe) + "..." : e;
-    return U(t);
+    const t = e.length > Ge ? e.slice(0, Ge) + "..." : e;
+    return F(t);
   }
   /**
    * Sanitizes an error message and guarantees a non-empty result.
@@ -4006,36 +4102,36 @@ class ne extends T {
   }
   shouldSuppressError(e, t) {
     const s = Date.now(), r = `${e}:${t}`, i = this.recentErrors.get(r);
-    return i !== void 0 && s - i < We ? (this.recentErrors.set(r, s), !0) : (this.recentErrors.set(r, s), this.recentErrors.size > $t ? (this.recentErrors.clear(), this.recentErrors.set(r, s), !1) : (this.recentErrors.size > q && this.pruneOldErrors(), !1));
+    return i !== void 0 && s - i < Ke ? (this.recentErrors.set(r, s), !0) : (this.recentErrors.set(r, s), this.recentErrors.size > Gt ? (this.recentErrors.clear(), this.recentErrors.set(r, s), !1) : (this.recentErrors.size > J && this.pruneOldErrors(), !1));
   }
   static TRUNCATION_SUFFIX = `
 ...truncated`;
   truncateStack(e) {
-    if (e.length <= Ge) return U(e);
-    const t = Ge - ne.TRUNCATION_SUFFIX.length, s = e.slice(0, t) + ne.TRUNCATION_SUFFIX;
-    return U(s);
+    if (e.length <= We) return F(e);
+    const t = We - re.TRUNCATION_SUFFIX.length, s = e.slice(0, t) + re.TRUNCATION_SUFFIX;
+    return F(s);
   }
   pruneOldErrors() {
     const e = Date.now();
     for (const [r, i] of this.recentErrors.entries())
-      e - i > We && this.recentErrors.delete(r);
-    if (this.recentErrors.size <= q)
+      e - i > Ke && this.recentErrors.delete(r);
+    if (this.recentErrors.size <= J)
       return;
-    const t = Array.from(this.recentErrors.entries()).sort((r, i) => r[1] - i[1]), s = this.recentErrors.size - q;
+    const t = Array.from(this.recentErrors.entries()).sort((r, i) => r[1] - i[1]), s = this.recentErrors.size - J;
     for (let r = 0; r < s; r += 1) {
       const i = t[r];
       i && this.recentErrors.delete(i[0]);
     }
   }
 }
-class zs extends T {
+class en extends T {
   isInitialized = !1;
   suppressNextScrollTimer = null;
   pageUnloadHandler = null;
   pageShowHandler = null;
   visibilityFlushHandler = null;
   prerenderActivationHandler = null;
-  emitter = new _s();
+  emitter = new ws();
   managers = {};
   handlers = {};
   integrationInstances = {};
@@ -4050,9 +4146,9 @@ class zs extends T {
   async init(e = {}) {
     if (this.isInitialized)
       return { sessionId: this.get("sessionId") ?? "" };
-    this.managers.storage = new Ws();
+    this.managers.storage = new Js();
     try {
-      return this.setupState(e), this.managers.event = new Ds(this.managers.storage, this.emitter), this.loadPersistedIdentity(), this.initializeHandlers(), this.setupPageLifecycleListeners(), await this.managers.event.recoverPersistedEvents().catch((t) => {
+      return this.setupState(e), this.managers.event = new Bs(this.managers.storage, this.emitter), this.loadPersistedIdentity(), this.initializeHandlers(), this.setupPageLifecycleListeners(), await this.managers.event.recoverPersistedEvents().catch((t) => {
         a("warn", "Failed to recover persisted events", { error: t });
       }), this.isInitialized = !0, { sessionId: this.get("sessionId") ?? "" };
     } catch (t) {
@@ -4073,9 +4169,9 @@ class zs extends T {
     }
     let r = t;
     t && typeof t == "object" && !Array.isArray(t) && Object.getPrototypeOf(t) !== Object.prototype && (r = Object.assign({}, t));
-    const { valid: i, error: o, sanitizedMetadata: c } = Ts(e, r);
+    const { valid: i, error: o, sanitizedMetadata: c } = Is(e, r);
     if (!i) {
-      if (this.get("mode") === te.QA)
+      if (this.get("mode") === se.QA)
         throw new Error(`[TraceLog] Custom event "${e}" validation failed: ${o}`);
       a("warn", `Custom event "${e}" dropped: ${o}`);
       return;
@@ -4112,14 +4208,14 @@ class zs extends T {
   }
   setupState(e = {}) {
     this.set("config", e);
-    const t = Us.getId(this.managers.storage);
+    const t = $s.getId(this.managers.storage);
     this.set("userId", t);
-    const s = cs(e);
+    const s = ds(e);
     this.set("collectApiUrls", s);
-    const r = Bt();
+    const r = Xt();
     this.set("device", r);
-    const i = D(window.location.href, e.sensitiveQueryParams);
-    this.set("pageUrl", i), rs() && this.set("mode", te.QA);
+    const i = U(window.location.href, e.sensitiveQueryParams);
+    this.set("pageUrl", i), as() && this.set("mode", se.QA);
   }
   /**
    * @internal Used by api.ts for configuration access
@@ -4174,7 +4270,7 @@ class zs extends T {
       a("warn", "identify() userId exceeds 256 characters", { data: { length: e.trim().length } });
       return;
     }
-    const s = e.trim(), r = Ae(t), i = {
+    const s = e.trim(), r = be(t), i = {
       userId: s,
       ...r ? { traits: r } : {}
     };
@@ -4197,8 +4293,8 @@ class zs extends T {
    */
   async resetIdentity() {
     await this.managers.event?.flushImmediately().catch((t) => (a("debug", "Failed to flush before identity reset", { error: t }), !1)), this.set("identity", void 0), this.clearPersistedIdentity();
-    const e = at();
-    this.managers.storage.setItem(Ee, e), this.set("userId", e), this.set("hasStartSession", !1), this.set("sessionId", null), this.handlers.session?.stopTracking(), this.handlers.session?.startTracking(), a("debug", "Identity reset, new UUID generated");
+    const e = lt();
+    this.managers.storage.setItem(ve, e), this.set("userId", e), this.set("hasStartSession", !1), this.set("sessionId", null), this.handlers.session?.stopTracking(), this.handlers.session?.startTracking(), a("debug", "Identity reset, new UUID generated");
   }
   /**
    * Returns the project ID used for identity storage scoping.
@@ -4211,7 +4307,7 @@ class zs extends T {
    */
   persistIdentity(e) {
     try {
-      const t = this.getProjectId(), s = de(t);
+      const t = this.getProjectId(), s = he(t);
       this.managers.storage.setItem(s, JSON.stringify(e));
     } catch {
       a("debug", "Failed to persist identity to localStorage");
@@ -4222,12 +4318,12 @@ class zs extends T {
    * Also migrates pending identity (set before init) to the project-scoped key.
    */
   loadPersistedIdentity() {
-    const e = this.managers.storage, t = this.getProjectId(), s = de(t);
+    const e = this.managers.storage, t = this.getProjectId(), s = he(t);
     try {
-      const r = e.getItem(P);
+      const r = e.getItem(k);
       if (r) {
         const i = JSON.parse(r);
-        if (e.removeItem(P), !this.isValidIdentityData(i)) {
+        if (e.removeItem(k), !this.isValidIdentityData(i)) {
           a("debug", "Invalid pending identity in localStorage, discarded");
           return;
         }
@@ -4236,7 +4332,7 @@ class zs extends T {
         return;
       }
     } catch {
-      e.removeItem(P);
+      e.removeItem(k);
     }
     try {
       const r = e.getItem(s);
@@ -4270,7 +4366,7 @@ class zs extends T {
    * localStorage values.
    */
   normalizePersistedIdentity(e) {
-    const t = Ae(e.traits);
+    const t = be(e.traits);
     return {
       userId: e.userId.trim(),
       ...t ? { traits: t } : {}
@@ -4282,7 +4378,7 @@ class zs extends T {
   clearPersistedIdentity() {
     try {
       const e = this.managers.storage, t = this.getProjectId();
-      e.removeItem(de(t)), e.removeItem(P);
+      e.removeItem(he(t)), e.removeItem(k);
     } catch {
       a("debug", "Failed to clear persisted identity");
     }
@@ -4300,7 +4396,7 @@ class zs extends T {
   }
   initializeHandlers() {
     const e = this.get("config");
-    this.handlers.session = new Hs(
+    this.handlers.session = new Gs(
       this.managers.storage,
       this.managers.event
     ), this.handlers.session.startTracking();
@@ -4309,31 +4405,31 @@ class zs extends T {
         this.set("suppressNextScroll", !1);
       }, 500);
     };
-    this.handlers.pageView = new xs(this.managers.event, t), this.handlers.click = new Bs(this.managers.event), this.handlers.scroll = new $s(this.managers.event), this.handlers.performance = new Ks(this.managers.event), this.handlers.error = new ne(this.managers.event, this.emitter);
+    this.handlers.pageView = new Ws(this.managers.event, t), this.handlers.click = new Ks(this.managers.event), this.handlers.scroll = new zs(this.managers.event), this.handlers.performance = new Zs(this.managers.event), this.handlers.error = new re(this.managers.event, this.emitter);
     const s = () => {
       if (this.handlers.pageView?.startTracking(), this.handlers.click?.startTracking(), this.handlers.scroll?.startTracking(), this.handlers.performance?.startTracking().catch((r) => {
         a("warn", "Failed to start performance tracking", { error: r });
       }), this.handlers.error?.startTracking(), e.integrations?.tracelog?.shopify) {
-        const r = new Gs();
-        r.activate(), this.integrationInstances.shopifyCartLinker = r, this.emitter.on(V.EVENT, (i) => {
+        const r = new qs();
+        r.activate(), this.integrationInstances.shopifyCartLinker = r, this.emitter.on(H.EVENT, (i) => {
           i.type === d.SESSION_START && r.onSessionChange();
         });
       }
     };
-    ot() ? (this.prerenderActivationHandler = () => {
+    ct() ? (this.prerenderActivationHandler = () => {
       this.prerenderActivationHandler = null, s();
     }, document.addEventListener("prerenderingchange", this.prerenderActivationHandler, { once: !0 })) : s();
   }
 }
-const R = [];
-let f = null, F = !1, A = !1, N = null;
-const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { sessionId: "" } : (A = !1, window.__traceLogDisabled === !0 ? { sessionId: "" } : f ? { sessionId: f.getSessionId() ?? "" } : (F && N || (F = !0, N = (async () => {
+const O = [];
+let f = null, V = !1, A = !1, N = null;
+const tn = async (n) => typeof window > "u" || typeof document > "u" ? { sessionId: "" } : (A = !1, window.__traceLogDisabled === !0 ? { sessionId: "" } : f ? { sessionId: f.getSessionId() ?? "" } : (V && N || (V = !0, N = (async () => {
   try {
-    const e = ps(n ?? {}), t = new zs();
+    const e = vs(n ?? {}), t = new en();
     try {
-      R.forEach(({ event: o, callback: c }) => {
+      O.forEach(({ event: o, callback: c }) => {
         t.on(o, c);
-      }), R.length = 0;
+      }), O.length = 0;
       const s = t.init(e), r = new Promise((o, c) => {
         setTimeout(() => {
           c(new Error("[TraceLog] Initialization timeout after 10000ms"));
@@ -4351,9 +4447,9 @@ const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { session
   } catch (e) {
     throw f = null, e;
   } finally {
-    F = !1, N = null;
+    V = !1, N = null;
   }
-})()), N)), Ys = (n, e, t) => {
+})()), N)), sn = (n, e, t) => {
   if (!(typeof window > "u" || typeof document > "u")) {
     if (!f)
       throw new Error("[TraceLog] TraceLog not initialized. Please call init() first.");
@@ -4361,24 +4457,24 @@ const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { session
       throw new Error("[TraceLog] Cannot send events while TraceLog is being destroyed");
     f.sendCustomEvent(n, e, t);
   }
-}, qs = (n, e) => {
+}, nn = (n, e) => {
   if (!(typeof window > "u" || typeof document > "u")) {
-    if (!f || F) {
-      R.push({ event: n, callback: e });
+    if (!f || V) {
+      O.push({ event: n, callback: e });
       return;
     }
     f.on(n, e);
   }
-}, Js = (n, e) => {
+}, rn = (n, e) => {
   if (!(typeof window > "u" || typeof document > "u")) {
     if (!f) {
-      const t = R.findIndex((s) => s.event === n && s.callback === e);
-      t !== -1 && R.splice(t, 1);
+      const t = O.findIndex((s) => s.event === n && s.callback === e);
+      t !== -1 && O.splice(t, 1);
       return;
     }
     f.off(n, e);
   }
-}, Zs = () => typeof window > "u" || typeof document > "u" ? !1 : f !== null, en = () => typeof window > "u" || typeof document > "u" || !f ? null : f.getSessionId(), tn = () => typeof window > "u" || typeof document > "u" || !f ? null : f.getUserId(), sn = () => {
+}, on = () => typeof window > "u" || typeof document > "u" ? !1 : f !== null, an = () => typeof window > "u" || typeof document > "u" || !f ? null : f.getSessionId(), cn = () => typeof window > "u" || typeof document > "u" || !f ? null : f.getUserId(), ln = () => {
   if (!(typeof window > "u" || typeof document > "u")) {
     if (A)
       throw new Error("[TraceLog] Destroy operation already in progress");
@@ -4388,12 +4484,12 @@ const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { session
     }
     A = !0;
     try {
-      f.destroy(), f = null, F = !1, N = null, R.length = 0, A = !1;
+      f.destroy(), f = null, V = !1, N = null, O.length = 0, A = !1;
     } catch (n) {
-      f = null, F = !1, N = null, R.length = 0, A = !1, a("warn", "Error during destroy, forced cleanup completed", { error: n });
+      f = null, V = !1, N = null, O.length = 0, A = !1, a("warn", "Error during destroy, forced cleanup completed", { error: n });
     }
   }
-}, nn = (n, e) => {
+}, un = (n, e) => {
   if (!(typeof window > "u" || typeof document > "u")) {
     if (!n || typeof n != "string" || n.trim().length === 0) {
       a("warn", "identify() called with invalid userId");
@@ -4412,20 +4508,20 @@ const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { session
       return;
     }
     try {
-      const t = Ae(e), s = {
+      const t = be(e), s = {
         userId: n.trim(),
         ...t ? { traits: t } : {}
       };
-      localStorage.setItem(P, JSON.stringify(s)), a("debug", "Identity persisted pre-init (will be applied on init)");
+      localStorage.setItem(k, JSON.stringify(s)), a("debug", "Identity persisted pre-init (will be applied on init)");
     } catch {
       a("debug", "Failed to persist pre-init identity");
     }
   }
-}, rn = async () => {
+}, dn = async () => {
   if (!(typeof window > "u" || typeof document > "u")) {
     if (!f) {
       try {
-        localStorage.removeItem(P);
+        localStorage.removeItem(k);
       } catch {
       }
       return;
@@ -4434,32 +4530,32 @@ const Qs = async (n) => typeof window > "u" || typeof document > "u" ? { session
       throw new Error("[TraceLog] Cannot reset identity while TraceLog is being destroyed");
     await f.resetIdentity();
   }
-}, On = {
-  init: Qs,
-  event: Ys,
-  on: qs,
-  off: Js,
-  isInitialized: Zs,
-  getSessionId: en,
-  getUserId: tn,
-  destroy: sn,
-  identify: nn,
-  resetIdentity: rn
+}, Vn = {
+  init: tn,
+  event: sn,
+  on: nn,
+  off: rn,
+  isInitialized: on,
+  getSessionId: an,
+  getUserId: cn,
+  destroy: ln,
+  identify: un,
+  resetIdentity: dn
 };
-var Le, b, $, ct, re, lt = -1, O = function(n) {
+var Le, L, j, dt, ie, ht = -1, P = function(n) {
   addEventListener("pageshow", (function(e) {
-    e.persisted && (lt = e.timeStamp, n(e));
+    e.persisted && (ht = e.timeStamp, n(e));
   }), !0);
-}, Pe = function() {
+}, ke = function() {
   var n = self.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0];
   if (n && n.responseStart > 0 && n.responseStart < performance.now()) return n;
-}, oe = function() {
-  var n = Pe();
+}, ae = function() {
+  var n = ke();
   return n && n.activationStart || 0;
 }, E = function(n, e) {
-  var t = Pe(), s = "navigate";
-  return lt >= 0 ? s = "back-forward-cache" : t && (document.prerendering || oe() > 0 ? s = "prerender" : document.wasDiscarded ? s = "restore" : t.type && (s = t.type.replace(/_/g, "-"))), { name: n, value: e === void 0 ? -1 : e, rating: "good", delta: 0, entries: [], id: "v4-".concat(Date.now(), "-").concat(Math.floor(8999999999999 * Math.random()) + 1e12), navigationType: s };
-}, H = function(n, e, t) {
+  var t = ke(), s = "navigate";
+  return ht >= 0 ? s = "back-forward-cache" : t && (document.prerendering || ae() > 0 ? s = "prerender" : document.wasDiscarded ? s = "restore" : t.type && (s = t.type.replace(/_/g, "-"))), { name: n, value: e === void 0 ? -1 : e, rating: "good", delta: 0, entries: [], id: "v4-".concat(Date.now(), "-").concat(Math.floor(8999999999999 * Math.random()) + 1e12), navigationType: s };
+}, x = function(n, e, t) {
   try {
     if (PerformanceObserver.supportedEntryTypes.includes(n)) {
       var s = new PerformanceObserver((function(r) {
@@ -4478,56 +4574,56 @@ var Le, b, $, ct, re, lt = -1, O = function(n) {
       return c > l[1] ? "poor" : c > l[0] ? "needs-improvement" : "good";
     })(e.value, t), n(e));
   };
-}, ke = function(n) {
+}, De = function(n) {
   requestAnimationFrame((function() {
     return requestAnimationFrame((function() {
       return n();
     }));
   }));
-}, X = function(n) {
+}, G = function(n) {
   document.addEventListener("visibilitychange", (function() {
     document.visibilityState === "hidden" && n();
   }));
-}, ae = function(n) {
+}, ce = function(n) {
   var e = !1;
   return function() {
     e || (n(), e = !0);
   };
-}, k = -1, et = function() {
+}, D = -1, st = function() {
   return document.visibilityState !== "hidden" || document.prerendering ? 1 / 0 : 0;
-}, ie = function(n) {
-  document.visibilityState === "hidden" && k > -1 && (k = n.type === "visibilitychange" ? n.timeStamp : 0, on());
-}, tt = function() {
-  addEventListener("visibilitychange", ie, !0), addEventListener("prerenderingchange", ie, !0);
-}, on = function() {
-  removeEventListener("visibilitychange", ie, !0), removeEventListener("prerenderingchange", ie, !0);
-}, De = function() {
-  return k < 0 && (k = et(), tt(), O((function() {
+}, oe = function(n) {
+  document.visibilityState === "hidden" && D > -1 && (D = n.type === "visibilitychange" ? n.timeStamp : 0, hn());
+}, nt = function() {
+  addEventListener("visibilitychange", oe, !0), addEventListener("prerenderingchange", oe, !0);
+}, hn = function() {
+  removeEventListener("visibilitychange", oe, !0), removeEventListener("prerenderingchange", oe, !0);
+}, Ue = function() {
+  return D < 0 && (D = st(), nt(), P((function() {
     setTimeout((function() {
-      k = et(), tt();
+      D = st(), nt();
     }), 0);
   }))), { get firstHiddenTime() {
-    return k;
+    return D;
   } };
-}, G = function(n) {
+}, W = function(n) {
   document.prerendering ? addEventListener("prerenderingchange", (function() {
     return n();
   }), !0) : n();
-}, be = [1800, 3e3], ut = function(n, e) {
-  e = e || {}, G((function() {
-    var t, s = De(), r = E("FCP"), i = H("paint", (function(o) {
+}, Me = [1800, 3e3], ft = function(n, e) {
+  e = e || {}, W((function() {
+    var t, s = Ue(), r = E("FCP"), i = x("paint", (function(o) {
       o.forEach((function(c) {
-        c.name === "first-contentful-paint" && (i.disconnect(), c.startTime < s.firstHiddenTime && (r.value = Math.max(c.startTime - oe(), 0), r.entries.push(c), t(!0)));
+        c.name === "first-contentful-paint" && (i.disconnect(), c.startTime < s.firstHiddenTime && (r.value = Math.max(c.startTime - ae(), 0), r.entries.push(c), t(!0)));
       }));
     }));
-    i && (t = v(n, r, be, e.reportAllChanges), O((function(o) {
-      r = E("FCP"), t = v(n, r, be, e.reportAllChanges), ke((function() {
+    i && (t = v(n, r, Me, e.reportAllChanges), P((function(o) {
+      r = E("FCP"), t = v(n, r, Me, e.reportAllChanges), De((function() {
         r.value = performance.now() - o.timeStamp, t(!0);
       }));
     })));
   }));
-}, Me = [0.1, 0.25], an = function(n, e) {
-  e = e || {}, ut(ae((function() {
+}, Re = [0.1, 0.25], fn = function(n, e) {
+  e = e || {}, ft(ce((function() {
     var t, s = E("CLS", 0), r = 0, i = [], o = function(l) {
       l.forEach((function(u) {
         if (!u.hadRecentInput) {
@@ -4535,190 +4631,190 @@ var Le, b, $, ct, re, lt = -1, O = function(n) {
           r && u.startTime - p.startTime < 1e3 && u.startTime - h.startTime < 5e3 ? (r += u.value, i.push(u)) : (r = u.value, i = [u]);
         }
       })), r > s.value && (s.value = r, s.entries = i, t());
-    }, c = H("layout-shift", o);
-    c && (t = v(n, s, Me, e.reportAllChanges), X((function() {
+    }, c = x("layout-shift", o);
+    c && (t = v(n, s, Re, e.reportAllChanges), G((function() {
       o(c.takeRecords()), t(!0);
-    })), O((function() {
-      r = 0, s = E("CLS", 0), t = v(n, s, Me, e.reportAllChanges), ke((function() {
+    })), P((function() {
+      r = 0, s = E("CLS", 0), t = v(n, s, Re, e.reportAllChanges), De((function() {
         return t();
       }));
     })), setTimeout(t, 0));
   })));
-}, dt = 0, pe = 1 / 0, Q = 0, cn = function(n) {
+}, gt = 0, Se = 1 / 0, Y = 0, gn = function(n) {
   n.forEach((function(e) {
-    e.interactionId && (pe = Math.min(pe, e.interactionId), Q = Math.max(Q, e.interactionId), dt = Q ? (Q - pe) / 7 + 1 : 0);
+    e.interactionId && (Se = Math.min(Se, e.interactionId), Y = Math.max(Y, e.interactionId), gt = Y ? (Y - Se) / 7 + 1 : 0);
   }));
-}, ht = function() {
-  return Le ? dt : performance.interactionCount || 0;
-}, ln = function() {
-  "interactionCount" in performance || Le || (Le = H("event", cn, { type: "event", buffered: !0, durationThreshold: 0 }));
-}, I = [], J = /* @__PURE__ */ new Map(), ft = 0, un = function() {
-  var n = Math.min(I.length - 1, Math.floor((ht() - ft) / 50));
+}, mt = function() {
+  return Le ? gt : performance.interactionCount || 0;
+}, mn = function() {
+  "interactionCount" in performance || Le || (Le = x("event", gn, { type: "event", buffered: !0, durationThreshold: 0 }));
+}, I = [], Z = /* @__PURE__ */ new Map(), pt = 0, pn = function() {
+  var n = Math.min(I.length - 1, Math.floor((mt() - pt) / 50));
   return I[n];
-}, dn = [], hn = function(n) {
-  if (dn.forEach((function(r) {
+}, Sn = [], En = function(n) {
+  if (Sn.forEach((function(r) {
     return r(n);
   })), n.interactionId || n.entryType === "first-input") {
-    var e = I[I.length - 1], t = J.get(n.interactionId);
+    var e = I[I.length - 1], t = Z.get(n.interactionId);
     if (t || I.length < 10 || n.duration > e.latency) {
       if (t) n.duration > t.latency ? (t.entries = [n], t.latency = n.duration) : n.duration === t.latency && n.startTime === t.entries[0].startTime && t.entries.push(n);
       else {
         var s = { id: n.interactionId, latency: n.duration, entries: [n] };
-        J.set(s.id, s), I.push(s);
+        Z.set(s.id, s), I.push(s);
       }
       I.sort((function(r, i) {
         return i.latency - r.latency;
       })), I.length > 10 && I.splice(10).forEach((function(r) {
-        return J.delete(r.id);
+        return Z.delete(r.id);
       }));
     }
   }
-}, gt = function(n) {
+}, St = function(n) {
   var e = self.requestIdleCallback || self.setTimeout, t = -1;
-  return n = ae(n), document.visibilityState === "hidden" ? n() : (t = e(n), X(n)), t;
-}, Ce = [200, 500], fn = function(n, e) {
-  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (e = e || {}, G((function() {
+  return n = ce(n), document.visibilityState === "hidden" ? n() : (t = e(n), G(n)), t;
+}, Ce = [200, 500], vn = function(n, e) {
+  "PerformanceEventTiming" in self && "interactionId" in PerformanceEventTiming.prototype && (e = e || {}, W((function() {
     var t;
-    ln();
+    mn();
     var s, r = E("INP"), i = function(c) {
-      gt((function() {
-        c.forEach(hn);
-        var l = un();
+      St((function() {
+        c.forEach(En);
+        var l = pn();
         l && l.latency !== r.value && (r.value = l.latency, r.entries = l.entries, s());
       }));
-    }, o = H("event", i, { durationThreshold: (t = e.durationThreshold) !== null && t !== void 0 ? t : 40 });
-    s = v(n, r, Ce, e.reportAllChanges), o && (o.observe({ type: "first-input", buffered: !0 }), X((function() {
+    }, o = x("event", i, { durationThreshold: (t = e.durationThreshold) !== null && t !== void 0 ? t : 40 });
+    s = v(n, r, Ce, e.reportAllChanges), o && (o.observe({ type: "first-input", buffered: !0 }), G((function() {
       i(o.takeRecords()), s(!0);
-    })), O((function() {
-      ft = ht(), I.length = 0, J.clear(), r = E("INP"), s = v(n, r, Ce, e.reportAllChanges);
+    })), P((function() {
+      pt = mt(), I.length = 0, Z.clear(), r = E("INP"), s = v(n, r, Ce, e.reportAllChanges);
     })));
   })));
-}, Ne = [2500, 4e3], Se = {}, gn = function(n, e) {
-  e = e || {}, G((function() {
-    var t, s = De(), r = E("LCP"), i = function(l) {
+}, Ne = [2500, 4e3], Ee = {}, Tn = function(n, e) {
+  e = e || {}, W((function() {
+    var t, s = Ue(), r = E("LCP"), i = function(l) {
       e.reportAllChanges || (l = l.slice(-1)), l.forEach((function(u) {
-        u.startTime < s.firstHiddenTime && (r.value = Math.max(u.startTime - oe(), 0), r.entries = [u], t());
+        u.startTime < s.firstHiddenTime && (r.value = Math.max(u.startTime - ae(), 0), r.entries = [u], t());
       }));
-    }, o = H("largest-contentful-paint", i);
+    }, o = x("largest-contentful-paint", i);
     if (o) {
       t = v(n, r, Ne, e.reportAllChanges);
-      var c = ae((function() {
-        Se[r.id] || (i(o.takeRecords()), o.disconnect(), Se[r.id] = !0, t(!0));
+      var c = ce((function() {
+        Ee[r.id] || (i(o.takeRecords()), o.disconnect(), Ee[r.id] = !0, t(!0));
       }));
       ["keydown", "click"].forEach((function(l) {
         addEventListener(l, (function() {
-          return gt(c);
+          return St(c);
         }), { once: !0, capture: !0 });
-      })), X(c), O((function(l) {
-        r = E("LCP"), t = v(n, r, Ne, e.reportAllChanges), ke((function() {
-          r.value = performance.now() - l.timeStamp, Se[r.id] = !0, t(!0);
+      })), G(c), P((function(l) {
+        r = E("LCP"), t = v(n, r, Ne, e.reportAllChanges), De((function() {
+          r.value = performance.now() - l.timeStamp, Ee[r.id] = !0, t(!0);
         }));
       }));
     }
   }));
-}, Re = [800, 1800], mn = function n(e) {
-  document.prerendering ? G((function() {
+}, Oe = [800, 1800], _n = function n(e) {
+  document.prerendering ? W((function() {
     return n(e);
   })) : document.readyState !== "complete" ? addEventListener("load", (function() {
     return n(e);
   }), !0) : setTimeout(e, 0);
-}, pn = function(n, e) {
+}, yn = function(n, e) {
   e = e || {};
-  var t = E("TTFB"), s = v(n, t, Re, e.reportAllChanges);
-  mn((function() {
-    var r = Pe();
-    r && (t.value = Math.max(r.responseStart - oe(), 0), t.entries = [r], s(!0), O((function() {
-      t = E("TTFB", 0), (s = v(n, t, Re, e.reportAllChanges))(!0);
+  var t = E("TTFB"), s = v(n, t, Oe, e.reportAllChanges);
+  _n((function() {
+    var r = ke();
+    r && (t.value = Math.max(r.responseStart - ae(), 0), t.entries = [r], s(!0), P((function() {
+      t = E("TTFB", 0), (s = v(n, t, Oe, e.reportAllChanges))(!0);
     })));
   }));
-}, B = { passive: !0, capture: !0 }, Sn = /* @__PURE__ */ new Date(), st = function(n, e) {
-  b || (b = e, $ = n, ct = /* @__PURE__ */ new Date(), pt(removeEventListener), mt());
-}, mt = function() {
-  if ($ >= 0 && $ < ct - Sn) {
-    var n = { entryType: "first-input", name: b.type, target: b.target, cancelable: b.cancelable, startTime: b.timeStamp, processingStart: b.timeStamp + $ };
-    re.forEach((function(e) {
+}, $ = { passive: !0, capture: !0 }, In = /* @__PURE__ */ new Date(), rt = function(n, e) {
+  L || (L = e, j = n, dt = /* @__PURE__ */ new Date(), vt(removeEventListener), Et());
+}, Et = function() {
+  if (j >= 0 && j < dt - In) {
+    var n = { entryType: "first-input", name: L.type, target: L.target, cancelable: L.cancelable, startTime: L.timeStamp, processingStart: L.timeStamp + j };
+    ie.forEach((function(e) {
       e(n);
-    })), re = [];
+    })), ie = [];
   }
-}, En = function(n) {
+}, wn = function(n) {
   if (n.cancelable) {
     var e = (n.timeStamp > 1e12 ? /* @__PURE__ */ new Date() : performance.now()) - n.timeStamp;
     n.type == "pointerdown" ? (function(t, s) {
       var r = function() {
-        st(t, s), o();
+        rt(t, s), o();
       }, i = function() {
         o();
       }, o = function() {
-        removeEventListener("pointerup", r, B), removeEventListener("pointercancel", i, B);
+        removeEventListener("pointerup", r, $), removeEventListener("pointercancel", i, $);
       };
-      addEventListener("pointerup", r, B), addEventListener("pointercancel", i, B);
-    })(e, n) : st(e, n);
+      addEventListener("pointerup", r, $), addEventListener("pointercancel", i, $);
+    })(e, n) : rt(e, n);
   }
-}, pt = function(n) {
+}, vt = function(n) {
   ["mousedown", "keydown", "touchstart", "pointerdown"].forEach((function(e) {
-    return n(e, En, B);
+    return n(e, wn, $);
   }));
-}, Oe = [100, 300], vn = function(n, e) {
-  e = e || {}, G((function() {
-    var t, s = De(), r = E("FID"), i = function(l) {
+}, Pe = [100, 300], An = function(n, e) {
+  e = e || {}, W((function() {
+    var t, s = Ue(), r = E("FID"), i = function(l) {
       l.startTime < s.firstHiddenTime && (r.value = l.processingStart - l.startTime, r.entries.push(l), t(!0));
     }, o = function(l) {
       l.forEach(i);
-    }, c = H("first-input", o);
-    t = v(n, r, Oe, e.reportAllChanges), c && (X(ae((function() {
+    }, c = x("first-input", o);
+    t = v(n, r, Pe, e.reportAllChanges), c && (G(ce((function() {
       o(c.takeRecords()), c.disconnect();
-    }))), O((function() {
+    }))), P((function() {
       var l;
-      r = E("FID"), t = v(n, r, Oe, e.reportAllChanges), re = [], $ = -1, b = null, pt(addEventListener), l = i, re.push(l), mt();
+      r = E("FID"), t = v(n, r, Pe, e.reportAllChanges), ie = [], j = -1, L = null, vt(addEventListener), l = i, ie.push(l), Et();
     })));
   }));
 };
-const Tn = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const bn = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  CLSThresholds: Me,
-  FCPThresholds: be,
-  FIDThresholds: Oe,
+  CLSThresholds: Re,
+  FCPThresholds: Me,
+  FIDThresholds: Pe,
   INPThresholds: Ce,
   LCPThresholds: Ne,
-  TTFBThresholds: Re,
-  onCLS: an,
-  onFCP: ut,
-  onFID: vn,
-  onINP: fn,
-  onLCP: gn,
-  onTTFB: pn
+  TTFBThresholds: Oe,
+  onCLS: fn,
+  onFCP: ft,
+  onFID: An,
+  onINP: vn,
+  onLCP: Tn,
+  onTTFB: yn
 }, Symbol.toStringTag, { value: "Module" }));
 export {
   m as AppConfigValidationError,
-  _n as DEFAULT_SESSION_TIMEOUT,
-  ye as DEFAULT_WEB_VITALS_MODE,
+  Ln as DEFAULT_SESSION_TIMEOUT,
+  Ie as DEFAULT_WEB_VITALS_MODE,
   w as DeviceType,
-  V as EmitterEvent,
-  x as ErrorType,
+  H as EmitterEvent,
+  B as ErrorType,
   d as EventType,
-  Nn as InitializationTimeoutError,
-  je as IntegrationValidationError,
-  Cn as MAX_ARRAY_LENGTH,
-  An as MAX_CUSTOM_EVENT_ARRAY_SIZE,
-  wn as MAX_CUSTOM_EVENT_KEYS,
-  yn as MAX_CUSTOM_EVENT_NAME_LENGTH,
-  In as MAX_CUSTOM_EVENT_STRING_SIZE,
-  Ln as MAX_NESTED_OBJECT_KEYS,
-  bn as MAX_STRING_LENGTH,
-  Mn as MAX_STRING_LENGTH_IN_ARRAY,
-  te as Mode,
-  fs as PII_PATTERNS,
+  Un as InitializationTimeoutError,
+  Xe as IntegrationValidationError,
+  Dn as MAX_ARRAY_LENGTH,
+  Nn as MAX_CUSTOM_EVENT_ARRAY_SIZE,
+  Cn as MAX_CUSTOM_EVENT_KEYS,
+  Mn as MAX_CUSTOM_EVENT_NAME_LENGTH,
+  Rn as MAX_CUSTOM_EVENT_STRING_SIZE,
+  On as MAX_NESTED_OBJECT_KEYS,
+  Pn as MAX_STRING_LENGTH,
+  kn as MAX_STRING_LENGTH_IN_ARRAY,
+  se as Mode,
+  ps as PII_PATTERNS,
   C as PermanentError,
-  Z as RateLimitError,
-  $e as SamplingRateValidationError,
-  ve as ScrollDirection,
-  Lt as SessionTimeoutValidationError,
-  M as SpecialApiUrl,
-  ee as TimeoutError,
-  j as TraceLogValidationError,
-  Rn as WEB_VITALS_GOOD_THRESHOLDS,
-  qt as WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
-  Jt as WEB_VITALS_POOR_THRESHOLDS,
-  Qe as getWebVitalsThresholds,
-  On as tracelog
+  ee as RateLimitError,
+  je as SamplingRateValidationError,
+  Te as ScrollDirection,
+  Rt as SessionTimeoutValidationError,
+  R as SpecialApiUrl,
+  te as TimeoutError,
+  X as TraceLogValidationError,
+  Fn as WEB_VITALS_GOOD_THRESHOLDS,
+  es as WEB_VITALS_NEEDS_IMPROVEMENT_THRESHOLDS,
+  ts as WEB_VITALS_POOR_THRESHOLDS,
+  Ye as getWebVitalsThresholds,
+  Vn as tracelog
 };
