@@ -28,9 +28,9 @@ import {
   RateLimitError,
   TimeoutError,
   type IngestionReceipt,
-  parseIngestionReceipt,
-  hasIngestEnvelopeSignature,
 } from '../types';
+// Deep import: these are transport internals, deliberately not re-exported by the types barrel.
+import { hasIngestEnvelopeSignature, parseIngestionReceipt } from '../types/ingestion-receipt.types';
 import { log } from '../utils';
 import { StorageManager } from './storage.manager';
 import { StateManager } from './state.manager';
@@ -709,12 +709,40 @@ export class SenderManager extends StateManager {
         return { receipt: null };
       }
 
-      const receipt = parseIngestionReceipt(body);
+      const receipt = this.noteReceipt(parseIngestionReceipt(body));
       return isUsableErrorCode(body.error) ? { responseCode: body.error, receipt } : { receipt };
     } catch {
       // Best-effort only. Status still determines permanence.
     }
     return { receipt: null };
+  }
+
+  /**
+   * Surfaces a receipt that reports data loss, and returns it unchanged so it can wrap a parse.
+   *
+   * `dropped` is the only counter worth a line: it is the one that means events were refused
+   * against the caller's intent. `filtered` is the project's own sampling or exclusions working
+   * exactly as configured, so keying on it would emit on every batch of a healthy project.
+   *
+   * `debug` is deliberate per the logging policy. A refusal is a server-side account, quota, or
+   * guardrail decision that a visitor to the merchant's site can do nothing about and must never
+   * see; the integrating developer reads it in development or with `?tlog_mode=qa`.
+   */
+  private noteReceipt(receipt: IngestionReceipt | null): IngestionReceipt | null {
+    if (receipt && receipt.dropped > 0) {
+      log('debug', 'Ingestion receipt reports dropped events', {
+        data: {
+          outcome: receipt.outcome,
+          accepted: receipt.accepted,
+          dropped: receipt.dropped,
+          coverage: receipt.coverage,
+          ...(receipt.reason ? { reason: receipt.reason } : {}),
+          ...(receipt.retryAt ? { retryAt: receipt.retryAt } : {}),
+        },
+      });
+    }
+
+    return receipt;
   }
 
   /**
@@ -728,7 +756,7 @@ export class SenderManager extends StateManager {
    */
   private async readIngestionReceipt(response: Response): Promise<IngestionReceipt | null> {
     try {
-      return parseIngestionReceipt(await response.clone().json());
+      return this.noteReceipt(parseIngestionReceipt(await response.clone().json()));
     } catch {
       return null;
     }

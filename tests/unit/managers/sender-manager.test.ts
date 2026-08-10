@@ -489,6 +489,83 @@ describe('SenderManager - persistence recovery', () => {
     expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
   });
 
+  // The recovery path composes its own body (recovered events + a fresh idempotency token) and
+  // reports through the same callbacks, so it can attribute a receipt independently of the live
+  // send path. These mirror the live-path receipt tests case for case.
+  it('forwards a recovery receipt to onSuccess', async () => {
+    const receipt = {
+      outcome: 'partial',
+      accepted: 1,
+      duplicates: 1,
+      filtered: 0,
+      dropped: 1,
+      coverage: 'partial',
+    } as const;
+    (global as any).fetch = vi.fn().mockResolvedValue(jsonResponse(200, receipt));
+
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify({ ...makeQueue(3), timestamp: Date.now() - 1000 }));
+
+    const onSuccess = vi.fn();
+    await sender.recoverPersistedEvents({ onSuccess });
+
+    expect(onSuccess.mock.calls[0]?.[3]).toEqual(receipt);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('surfaces a permanent rejection receipt to onFailure while discarding the recovered batch', async () => {
+    const receipt = {
+      outcome: 'rejected',
+      accepted: 0,
+      duplicates: 0,
+      filtered: 0,
+      dropped: 2,
+      reason: 'account_paused',
+      retryAt: '2026-09-01T00:00:00.000Z',
+      coverage: 'partial',
+    } as const;
+    const response = ingestErrorResponse(402, 'ACCOUNT_PAUSED');
+    response.json = async (): Promise<unknown> =>
+      await Promise.resolve({
+        statusCode: 402,
+        error: 'ACCOUNT_PAUSED',
+        message: 'Ingestion is paused for this account.',
+        ...receipt,
+      });
+    (global as any).fetch = vi.fn().mockResolvedValue(response);
+
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify({ ...makeQueue(2), timestamp: Date.now() - 1000 }));
+
+    const onFailure = vi.fn();
+    await sender.recoverPersistedEvents({ onFailure });
+
+    expect(onFailure).toHaveBeenCalledWith(receipt);
+    expect(storage.getItem(QUEUE_KEY(USER_ID))).toBeNull();
+  });
+
+  it('ignores a recovery rejection receipt from a responder that does not prove it is TraceLog', async () => {
+    const response = ingestErrorResponse(403, 'FORBIDDEN');
+    response.json = async (): Promise<unknown> =>
+      await Promise.resolve({
+        outcome: 'rejected',
+        accepted: 0,
+        duplicates: 0,
+        dropped: 99,
+        reason: 'account_paused',
+        coverage: 'partial',
+      });
+    (global as any).fetch = vi.fn().mockResolvedValue(response);
+
+    const { sender, storage } = makeSender();
+    storage.setItem(QUEUE_KEY(USER_ID), JSON.stringify({ ...makeQueue(2), timestamp: Date.now() - 1000 }));
+
+    const onFailure = vi.fn();
+    await sender.recoverPersistedEvents({ onFailure });
+
+    expect(onFailure).toHaveBeenCalledWith(undefined);
+  });
+
   it('discards expired persisted data (>2h old) without sending', async () => {
     const fetchMock = vi.fn();
     (global as any).fetch = fetchMock;

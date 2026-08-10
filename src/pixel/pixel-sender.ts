@@ -48,10 +48,18 @@ export async function sendBatch(settings: PixelSenderSettings, body: PixelEventB
   // 404 every event. Drop silently so it can be diagnosed via Shopify pixel logs.
   if (!settings.projectId) return null;
 
-  // Encode in case the merchant pastes whitespace, slashes, or other unsafe
-  // characters into the Shopify extension settings form.
-  const url = `${INGEST_HOST}/p/${encodeURIComponent(settings.projectId)}/collect`;
+  // One catch covers the whole body deliberately. Every failure here has the same answer —
+  // resolve to `null` — and the function is `async`, so anything thrown outside this block would
+  // reject a promise the caller intentionally discards (`void sendBatch(...)`) instead of
+  // surfacing anywhere. That makes the boundary the contract: `encodeURIComponent` (throws
+  // `URIError` on a lone surrogate), `JSON.stringify`, `fetch` (unavailable or throwing
+  // synchronously inside Shopify's sandbox), and `response.json()` (absent on a non-Response, or
+  // a non-JSON body) all land in the same place.
   try {
+    // Encode in case the merchant pastes whitespace, slashes, or other unsafe
+    // characters into the Shopify extension settings form.
+    const url = `${INGEST_HOST}/p/${encodeURIComponent(settings.projectId)}/collect`;
+
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,20 +67,15 @@ export async function sendBatch(settings: PixelSenderSettings, body: PixelEventB
       body: JSON.stringify(body),
     });
 
-    if (typeof response.json !== 'function') return null;
-    try {
-      const payload: unknown = await response.json();
-      // Same rule the standard sender applies: a receipt riding on a rejection is only read when
-      // the body proves a TraceLog host wrote it. On 2xx no signature exists, and none is needed —
-      // the status already established that the responder accepted the batch.
-      if (!response.ok && !hasIngestEnvelopeSignature(payload, response.status)) return null;
-      return parseIngestionReceipt(payload);
-    } catch {
-      return null;
-    }
+    const payload: unknown = await response.json();
+
+    // Same rule the standard sender applies: a receipt riding on a rejection is only read when
+    // the body proves a TraceLog host wrote it. On 2xx no signature exists, and none is needed —
+    // the status already established that the responder accepted the batch.
+    if (!response.ok && !hasIngestEnvelopeSignature(payload, response.status)) return null;
+
+    return parseIngestionReceipt(payload);
   } catch {
-    // Pixel runs inside Shopify's strict sandbox; fetch() may be unavailable
-    // or throw synchronously. Funnel events are best-effort — drop silently.
     return null;
   }
 }

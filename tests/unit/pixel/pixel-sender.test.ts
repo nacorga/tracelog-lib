@@ -152,4 +152,29 @@ describe('sendBatch', () => {
     const url = fetchSpy.mock.calls[0]![0] as string;
     expect(url).toBe('https://ingest.tracelog.io/p/proj%20abc%2Ffoo%3Fbar/collect');
   });
+
+  // `registerShopifyPixel` calls this as `void sendBatch(...)`, so a rejection has nowhere to go
+  // but an unhandled rejection inside Shopify's sandbox. Every throw in the body must therefore
+  // resolve to null instead — including the ones that happen before `fetch` is ever reached.
+  it('resolves to null when projectId cannot be URL-encoded', async () => {
+    // A lone surrogate is the one input `encodeURIComponent` throws `URIError` on.
+    await expect(sendBatch({ projectId: '\uD800' }, BODY)).resolves.toBeNull();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves to null when the body cannot be serialized', async () => {
+    const circular = { ...BODY } as PixelEventBody & { self?: unknown };
+    circular.self = circular;
+
+    await expect(sendBatch({ projectId: 'proj-abc' }, circular)).resolves.toBeNull();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('resolves to null when the response exposes no json reader', async () => {
+    fetchSpy.mockResolvedValue({ ok: true, status: 200 });
+
+    await expect(sendBatch({ projectId: 'proj-abc' }, BODY)).resolves.toBeNull();
+  });
 });

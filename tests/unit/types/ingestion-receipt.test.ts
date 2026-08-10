@@ -62,14 +62,45 @@ describe('parseIngestionReceipt', () => {
     ).toBeNull();
   });
 
+  // Each entry pins one clause of the parser. A receipt states how much of a merchant's traffic
+  // was refused, so every clause that stands between a malformed body and that claim needs a case
+  // holding it in place — a bounds check nothing exercises is a bounds check free to regress.
   it.each([
     null,
     true,
     {},
+    // Counter clauses: `typeof === 'number'`, `Number.isInteger`, and `>= 0`, each on its own.
     { outcome: 'accepted', accepted: -1, duplicates: 0, dropped: 0, coverage: 'complete' },
+    { outcome: 'partial', accepted: 1, duplicates: -1, dropped: 1, coverage: 'partial' },
+    { outcome: 'partial', accepted: 1, duplicates: 0, dropped: -1, coverage: 'partial' },
+    { outcome: 'accepted', accepted: 1.5, duplicates: 0, dropped: 0, coverage: 'complete' },
+    { outcome: 'accepted', accepted: 1, duplicates: 0, dropped: Number.POSITIVE_INFINITY, coverage: 'complete' },
+    { outcome: 'accepted', accepted: 1, duplicates: Number.NaN, dropped: 0, coverage: 'complete' },
+    { outcome: 'accepted', accepted: '1', duplicates: 0, dropped: 0, coverage: 'complete' },
+    // A counter the body never sent at all — absent is only tolerated for `filtered`.
+    { outcome: 'accepted', accepted: 1, duplicates: 0, coverage: 'complete' },
+    // Literal-union clauses: both are closed sets, and neither may be absent.
     { outcome: 'unknown', accepted: 1, duplicates: 0, dropped: 0, coverage: 'complete' },
+    { outcome: 'accepted', accepted: 1, duplicates: 0, dropped: 0, coverage: 'unknown' },
+    { outcome: 'accepted', accepted: 1, duplicates: 0, dropped: 0 },
   ])('returns null for a legacy or malformed body', (body) => {
     expect(parseIngestionReceipt(body)).toBeNull();
+  });
+
+  it('ignores a retryAt that is not a string rather than voiding the receipt', () => {
+    // `retryAt` is optional metadata, not a counter — a malformed one costs a retry hint, while
+    // voiding the whole receipt would also discard the `dropped` count the caller needs.
+    const parsed = parseIngestionReceipt({
+      outcome: 'rejected',
+      accepted: 0,
+      duplicates: 0,
+      dropped: 3,
+      retryAt: 1_759_000_000_000,
+      coverage: 'partial',
+    });
+
+    expect(parsed).toMatchObject({ dropped: 3 });
+    expect(parsed).not.toHaveProperty('retryAt');
   });
 
   it('drops an unrecognised reason rather than passing it through', () => {
