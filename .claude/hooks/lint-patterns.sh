@@ -4,7 +4,7 @@
 #
 # Scoped to src/pixel/** ONLY. This is where the Shopify pixel maps merchant
 # checkout/cart data into the forwarded analytics payload (event-mapper.ts) —
-# the real PII/revenue surface that the thin tracelog-shopify-app wrapper
+# the real PII/revenue surface that the thin tracelog-shopify-integration wrapper
 # delegates to. The substantive integrity rules therefore live here, not in the
 # shopify-app repo.
 #

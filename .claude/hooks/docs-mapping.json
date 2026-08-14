@@ -50,7 +50,7 @@
     },
     {
       "pattern": "src/pixel/",
-      "reason": "Shopify Web Pixel extension source — covered by its own lint hook (lint-patterns.sh pixel scope) and tracelog-shopify-app docs, not a general library doc surface"
+      "reason": "Shopify Web Pixel extension source — covered by its own lint hook (lint-patterns.sh pixel scope) and tracelog-shopify-integration docs, not a general library doc surface"
     }
   ]
 }
