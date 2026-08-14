@@ -1,31 +1,25 @@
 {
-  "$comment": "Code paths -> related internal + customer-facing docs for tracelog-lib. Consumed by .claude/hooks/check-docs.sh on every Write/Edit. Patterns are substring-matched against the file path relative to the package root. Paths starting with ../tracelog-docs/ resolve to the sibling tracelog-docs package.",
+  "$comment": "Code paths -> the docs that describe them, for tracelog-lib. Consumed by .claude/hooks/check-docs.sh on every Write/Edit. Patterns are substring-matched against the file path relative to the package root. Every doc path here must resolve — a mapping pointing at a file that does not exist reports a stale doc that cannot be read, which is worse than no reminder.",
   "$updated": "2026-07-06",
   "mappings": [
     {
       "pattern": "src/handlers/",
-      "docs": ["src/handlers/README.md", "API_REFERENCE.md", "../tracelog-docs/docs/library/automatic-tracking.md"],
+      "docs": ["src/handlers/README.md", "API_REFERENCE.md"],
       "description": "Auto-tracking handlers: click, scroll, page-view, performance (web vitals), error, session, viewport"
     },
     {
       "pattern": "src/managers/",
-      "docs": [
-        "src/managers/README.md",
-        "API_REFERENCE.md",
-        "BEST_PRACTICES.md",
-        "../tracelog-docs/docs/library/identify.md",
-        "../tracelog-docs/docs/library/global-metadata.md"
-      ],
+      "docs": ["src/managers/README.md", "API_REFERENCE.md", "BEST_PRACTICES.md"],
       "description": "Stateful coordinators: event, sender, session, state, storage, time, user"
     },
     {
       "pattern": "src/ecommerce/",
-      "docs": ["API_REFERENCE.md", "../tracelog-docs/docs/library/custom-events.md"],
+      "docs": ["API_REFERENCE.md"],
       "description": "E-commerce integrations (Shopify, etc.)"
     },
     {
       "pattern": "src/constants/",
-      "docs": ["API_REFERENCE.md", "../tracelog-docs/docs/library/qa-mode.md"],
+      "docs": ["API_REFERENCE.md"],
       "description": "Defaults and config bounds (e.g. DEFAULT_SESSION_TIMEOUT, qa-mode flags)"
     },
     {

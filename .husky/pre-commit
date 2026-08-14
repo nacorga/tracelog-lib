@@ -1,1 +1,8 @@
 npx lint-staged
+
+# The mechanical `staged` tier of ../.claude/rules/check-catalog.md. It reads the
+# STAGED blob, not the worktree, so it sees exactly what the commit would contain.
+# Self-skips with a message when the monorepo rules file is unreachable (a
+# standalone package clone) rather than passing silently — a gate that exits 0
+# because it could not look reads as green, which is worse than no gate.
+bash ../.claude/scripts/check-staged-rules.sh
