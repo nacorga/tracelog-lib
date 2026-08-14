@@ -1,1 +1,0 @@
-../../../.claude/agents/product-advisor.md
